@@ -8,4 +8,4 @@ echo --- misspellings that should be fixed ---
 echo --- correct words that should be left alone ---
 %EXE% --eval-ok "%~dp0tests\correct-words.txt" | findstr "^"
 echo --- end-to-end through the real keyboard hook ---
-%EXE% --selftest "teh quick brwon fox is improrvie insted of currect. shoulld i recieve it? " "the quick brown fox is improve instead of correct. should I receive it? " | findstr "^"
+%EXE% --selftest "teh quick brwon fox is improrvie, insted of currect. shoulld i recieve it? yes " "the quick brown fox is improve, instead of correct. Should I receive it? Yes " | findstr "^"

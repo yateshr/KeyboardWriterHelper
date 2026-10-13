@@ -16,6 +16,7 @@
 // Build: build.cmd (uses the C# compiler that ships with Windows).
 
 using System;
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -185,6 +186,7 @@ namespace KeyboardWriterHelper
         public double EditWeight = 3.0;       // score lost per unit of edit cost
         public double WindowsBonus = 0.5;     // trust in Windows' own order (first choice gets all of it)
         public bool UseOmissionCandidates = true;
+        public double MinScore = -2.5;         // an uncertain best guess scoring below this is left alone
         public double MaxFixCost = 3.5;       // beyond this the best guess is not trusted
 
         const string FrequencyResource = "english-frequency.txt";
@@ -195,7 +197,7 @@ namespace KeyboardWriterHelper
                      VowelSwap = 0.7, NearbySwap = 0.8, FirstLetterPenalty = 0.7,
                      MissingVowel = 0.6, MissingConsonant = 0.9;
         // Score penalties for kinds of candidate that are rarely what was meant.
-        const double SplitPenalty = 1.0, ProperNounPenalty = 1.0;
+        const double SplitPenalty = 2.0, ProperNounPenalty = 2.0;
         // Log10 count assumed for words missing from the frequency list.
         const float UnknownLog = 1.0f;
         // A regional spelling is at most this many factors of ten rarer than its twin.
@@ -204,6 +206,7 @@ namespace KeyboardWriterHelper
         const double ObscureFixCost = 1.0;
         // Words up to this length are handled cautiously (see Best).
         public const int ShortWord = 3;
+        const double MeantMinLog = 4.0, MeantGap = 1.5, WeakPartLog = 4.5;
         const double CautiousMaxCost = 0.6, CautiousMinLog = 5.0, NameSafeLog = 3.0;
 
         static readonly bool[,] Near = BuildNearTable();
@@ -261,6 +264,7 @@ namespace KeyboardWriterHelper
                 string candidate = windows[i];
                 string candidateLower = candidate.ToLowerInvariant();
                 if (candidateLower.Length == 0 || candidateLower.Length > MaxLength || !seen.Add(candidateLower)) continue;
+                if (IsWeakSplit(lower, candidateLower)) continue;
                 double cost = Cost(lower, candidateLower);
                 double score = FrequencyWeight * LogFrequency(candidateLower) - EditWeight * cost + WindowsBonus / (i + 1);
                 // Typed in lower case, so a name is unlikely - unless only the capital was missing.
@@ -272,11 +276,12 @@ namespace KeyboardWriterHelper
             // The letters are right and only capitals are missing ("english",
             // "github"): there is nothing to weigh. Not for very short tokens,
             // which are more often abbreviations ("rs", "nd", "imo").
-            foreach (Scored s in all)
+            // Only when it is Windows' own first choice: "frist" also lists "Frist"
+            // (a surname) after "first".
+            if (all.Count > 0 && all[0].Cost == 0)
             {
-                if (s.Cost != 0) continue;
-                if (trace != null) trace.Add(s);
-                return lower.Length > ShortWord ? s.Word : null;
+                if (trace != null) trace.Add(all[0]);
+                return lower.Length > ShortWord ? all[0].Word : null;
             }
 
             // Windows sometimes fails to offer the obvious word when letters were
@@ -315,11 +320,18 @@ namespace KeyboardWriterHelper
                 winner = s;
             }
             if (winner == null || winner.Cost > MaxFixCost) return null;
+            // A weak best guess is a coin toss; leaving the word alone costs less.
+            if (!certain && winner.Score < MinScore) return null;
             string fix = winner.Word.ToLowerInvariant();
             double commonness = LogFrequency(fix);
             // Swapping an unknown word for an obscure one ("rexx" -> "roex") is a
             // guess, usually at a name.
             if (!certain && winner.Cost >= ObscureFixCost && commonness <= UnknownLog) return null;
+            // A word people really use ("bruh", "yeet", "venv") that is nearly as
+            // common as its replacement is most likely meant. A typo of a common
+            // word ("teh") is far rarer than the word it was meant to be.
+            if (!certain && winner.Cost >= ObscureFixCost && LogFrequency(lower) >= MeantMinLog &&
+                LogFrequency(lower) >= commonness - MeantGap) return null;
             // "approx" -> "approx.": an abbreviation, not a misspelling.
             if (fix.EndsWith(".")) return null;
             if (IsSpellingVariant(lower, fix)) return null;
@@ -333,6 +345,16 @@ namespace KeyboardWriterHelper
                 if (!certain && (winner.Cost > CautiousMaxCost || commonness < CautiousMinLog)) return null;
             }
             return winner.Word;
+        }
+
+        // "publically" -> "public ally": Windows offers a missing space where the
+        // parts are not both everyday words, which is never what was meant.
+        bool IsWeakSplit(string typed, string candidate)
+        {
+            if (candidate.IndexOf(' ') < 0 || candidate.Replace(" ", "") != typed) return false;
+            foreach (string part in candidate.Split(' '))
+                if (part.Length < 3 || LogFrequency(part) < WeakPartLog) return true;
+            return false;
         }
 
         // "color"/"colour", "center"/"centre", "canceled"/"cancelled": both are
@@ -604,6 +626,48 @@ namespace KeyboardWriterHelper
         }
     }
 
+    // ---- Options, kept in a small key=value file ----
+
+    sealed class Settings
+    {
+        readonly string path;
+
+        // Read on the keyboard thread, written by the settings window.
+        public volatile bool FixOnPunctuation = true, CapitalizeSentences = true;
+
+        // path = null keeps the defaults and saves nothing (the self-test).
+        public Settings(string path)
+        {
+            this.path = path;
+            if (path == null || !File.Exists(path)) return;
+            try
+            {
+                foreach (string line in File.ReadAllLines(path))
+                {
+                    int eq = line.IndexOf('=');
+                    if (eq <= 0) continue;
+                    bool value = line.Substring(eq + 1).Trim() != "false";
+                    string key = line.Substring(0, eq).Trim();
+                    if (key == "fixOnPunctuation") FixOnPunctuation = value;
+                    else if (key == "capitalizeSentences") CapitalizeSentences = value;
+                }
+            }
+            catch (IOException) { }
+        }
+
+        public void Save()
+        {
+            if (path == null) return;
+            try
+            {
+                File.WriteAllText(path,
+                    "fixOnPunctuation=" + (FixOnPunctuation ? "true" : "false") + "\r\n" +
+                    "capitalizeSentences=" + (CapitalizeSentences ? "true" : "false") + "\r\n");
+            }
+            catch (IOException) { }
+        }
+    }
+
     // ---- A user-editable list kept in a text file, one entry per line ----
     // Used for the words never to correct and the programs never to correct in.
 
@@ -653,6 +717,17 @@ namespace KeyboardWriterHelper
         public bool Contains(string entry)
         {
             lock (gate) return entries.Contains(entry);
+        }
+
+        public string[] All()
+        {
+            lock (gate)
+            {
+                string[] all = new string[entries.Count];
+                entries.CopyTo(all);
+                Array.Sort(all, StringComparer.OrdinalIgnoreCase);
+                return all;
+            }
         }
 
         // Add and Remove change memory only (they may run on the keyboard thread);
@@ -775,7 +850,11 @@ namespace KeyboardWriterHelper
             // Everyday Indian words and services.
             "dosa", "idli", "daal", "upi", "kyc", "otp", "emi", "ifsc", "neft", "paytm", "aadhaar", "aadhar",
             "timepass", "updation", "crorepati", "saheb", "ustad", "mehendi", "jio", "swiggy", "zomato",
-            "flipkart", "phonepe", "gpay", "tcs"
+            "flipkart", "phonepe", "gpay", "tcs",
+            // More slang, tools and short forms the dictionary turns into real words.
+            "yo", "bruh", "bday", "wassup", "fave", "yeet", "simp", "highkey", "lowkey", "fomo", "srry", "sry",
+            "aint", "eslint", "venv", "mongodb", "postgres", "postgresql", "mysql", "sqlite", "redis", "nginx",
+            "regd", "recd", "engg", "pune", "iyer", "tarun"
         };
 
         // Common Hindi and Gujarati words as typed in English letters. Seeing one
@@ -802,6 +881,13 @@ namespace KeyboardWriterHelper
             "gayo", "gayu", "jaie", "aavo", "aavu", "aavsho", "karsho", "joiye", "gamtu", "chalse"
         };
 
+        // A full stop after these is not the end of a sentence.
+        static readonly HashSet<string> Abbreviations = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "dr", "mr", "mrs", "ms", "prof", "sr", "jr", "st", "vs", "etc", "inc", "ltd", "co", "no", "fig",
+            "approx", "min", "max", "dept", "govt", "mgmt", "eg", "ie", "al", "ca", "est", "ref", "tel", "ext"
+        };
+
         readonly Func<string, bool, string> suggest; // (word, cautious) -> fix or null
         readonly Func<string, bool> isIgnored;
         readonly Action<int, string> emit; // (backspaces, text to type)
@@ -819,6 +905,13 @@ namespace KeyboardWriterHelper
         // The word an undo just put back: it is not to be corrected again.
         string keepAsTyped;
         Undo undo;
+        // The previous word ended a sentence, so this one gets a capital letter.
+        bool capNext;
+
+        // Fix a word as soon as , ; : ! or ? follows it (a full stop waits for the
+        // space, because "example.com" is not a sentence end).
+        public volatile bool FixOnPunctuation = true;
+        public volatile bool CapitalizeSentences = true;
 
         public event Action<string, string> Corrected;
         public event Action<string> Undone;
@@ -835,6 +928,7 @@ namespace KeyboardWriterHelper
         {
             Clear();
             undo = null;
+            capNext = false;
             tainted = !clean;
             if (clean)
             {
@@ -865,10 +959,28 @@ namespace KeyboardWriterHelper
 
             if (c == ' ')
             {
+                bool hadWord = !tainted && word.Length > 0;
+                string last = word.ToString();
+                string ending = trail.ToString().TrimEnd(')', ']', '}', '"');
                 bool swallowed = TryCorrect(trail + " ");
                 Clear();
                 tainted = false;
+                if (hadWord)
+                    capNext = ending.Length > 0 && IsSentenceEnd(ending[ending.Length - 1]) &&
+                              (ending[ending.Length - 1] != '.' || !IsAbbreviation(last));
                 return swallowed;
+            }
+
+            // Punctuation right after a word: fix it now if the setting is on.
+            if (FixOnPunctuation && !tainted && word.Length > 0 && trail.Length == 0 && ",;:!?".IndexOf(c) >= 0 &&
+                TryCorrect(c.ToString()))
+            {
+                if (IsSentenceEnd(c)) afterSentenceEnd = true;
+                capNext = false;
+                Clear();
+                // Whatever follows with no space is part of the same token.
+                tainted = true;
+                return true;
             }
 
             // Punctuation after a word is held back: the word is only corrected once
@@ -884,8 +996,14 @@ namespace KeyboardWriterHelper
 
             if (IsSentenceEnd(c)) afterSentenceEnd = true;
             Clear();
+            capNext = false;
             tainted = true;
             return false;
+        }
+
+        static bool IsAbbreviation(string w)
+        {
+            return w.Length == 1 || Abbreviations.Contains(w);
         }
 
         void Clear()
@@ -928,6 +1046,7 @@ namespace KeyboardWriterHelper
             string original = word.ToString();
             if (original == keepAsTyped) return false;
             string fix = Decide(original, terminator);
+            if (capNext && CapitalizeSentences) fix = Capitalise(original, fix);
             if (fix == null) return false;
             // The space itself has not reached the screen yet, hence the -1.
             emit(original.Length + terminator.Length - 1, fix + terminator);
@@ -962,6 +1081,21 @@ namespace KeyboardWriterHelper
             if (capitalised && char.IsLower(fix[0]))
                 fix = char.ToUpperInvariant(fix[0]) + fix.Substring(1);
             return fix == w ? null : fix;
+        }
+
+        // The first word of a sentence gets a capital - unless it is something the
+        // user deliberately writes in lower case.
+        string Capitalise(string w, string fix)
+        {
+            string target = fix ?? w;
+            if (!char.IsLower(target[0])) return fix;
+            if (fix == null)
+            {
+                if (otherLanguage || isIgnored(w) || NeverCorrect.Contains(w) || w.EndsWith("'")) return null;
+                for (int i = 1; i < w.Length; i++)
+                    if (char.IsUpper(w[i])) return null;
+            }
+            return char.ToUpperInvariant(target[0]) + target.Substring(1);
         }
 
         static bool HasVowel(string w)
@@ -1116,6 +1250,7 @@ namespace KeyboardWriterHelper
         readonly ListFile myWords, excludedApps;
         readonly Dictionary<string, int> undoCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         readonly Counters counters;
+        readonly Settings settings;
         // Keys injected with this marker count as typed by the user (self-test only).
         readonly IntPtr testMarker;
         readonly Engine engine;
@@ -1137,6 +1272,8 @@ namespace KeyboardWriterHelper
         // Both raised on the keyboard thread.
         public event Action<string, string> Corrected;
         public event Action EnabledChanged;
+        // A word was added to "my words" because its fix was undone repeatedly.
+        public event Action<string> Learned;
 
         public bool Enabled
         {
@@ -1147,8 +1284,9 @@ namespace KeyboardWriterHelper
         // The program the user last typed in ("notepad.exe").
         public string LastApp { get { return lastApp; } }
 
-        public Corrector(SpellService spelling, ListFile myWords, ListFile excludedApps, Counters counters, IntPtr testMarker)
+        public Corrector(SpellService spelling, ListFile myWords, ListFile excludedApps, Counters counters, Settings settings, IntPtr testMarker)
         {
+            this.settings = settings;
             this.spelling = spelling;
             this.myWords = myWords;
             this.excludedApps = excludedApps;
@@ -1233,7 +1371,11 @@ namespace KeyboardWriterHelper
             int times;
             undoCounts.TryGetValue(word, out times);
             undoCounts[word] = ++times;
-            if (times >= UndosBeforeLearning) myWords.Add(word);
+            if (times >= UndosBeforeLearning && !myWords.Contains(word))
+            {
+                myWords.Add(word);
+                if (Learned != null) Learned(word);
+            }
         }
 
         IntPtr MouseProc(int nCode, IntPtr wParam, IntPtr lParam)
@@ -1327,6 +1469,8 @@ namespace KeyboardWriterHelper
                 engine.Break(false);
             }
             if (!on) return false;
+            engine.FixOnPunctuation = settings.FixOnPunctuation;
+            engine.CapitalizeSentences = settings.CapitalizeSentences;
 
             IntPtr foreground = Native.GetForegroundWindow();
             if (foreground != lastForeground)
@@ -1403,33 +1547,45 @@ namespace KeyboardWriterHelper
         const string AppName = "Keyboard Writer Helper";
         const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
         const string RunValue = "KeyboardWriterHelper";
+        const int MaxTrayText = 63; // NotifyIcon.Text throws beyond this
 
         readonly NotifyIcon tray;
-        readonly ToolStripMenuItem enabledItem, appItem, recentItem, startupItem, errorItem;
-        readonly Icon iconOn, iconOff;
+        readonly ToolStripMenuItem enabledItem, appItem, recentItem, startupItem, errorItem, statsItem;
+        readonly Icon iconOn, iconOff, iconSkipped;
         readonly Counters counters = new Counters();
+        readonly Settings settings;
         readonly ListFile myWords, excludedApps;
         readonly Corrector corrector;
-        readonly List<string> recent = new List<string>();
+        readonly List<string[]> recent = new List<string[]>(); // { typed, fixed }
         // Gives the keyboard thread a way to run code on the UI thread.
         readonly Control ui = new Control();
         readonly System.Windows.Forms.Timer housekeeping = new System.Windows.Forms.Timer();
-        readonly string statsPath;
+        readonly string statsPath, lifetimePath, ownExe;
         readonly DateTime startedAt = DateTime.Now;
-        string lastStats;
+        // Totals from earlier runs; counts only, never text.
+        long baseWords, baseCorrections, baseUndone;
+        string lastStats, lastLifetime;
+        // The program in front, ignoring this app's own windows.
+        string currentApp = "";
+        SettingsForm settingsForm;
 
         public TrayApp()
         {
             string folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "KeyboardWriterHelper");
             Directory.CreateDirectory(folder);
             statsPath = Path.Combine(folder, "stats.txt");
+            lifetimePath = Path.Combine(folder, "lifetime.txt");
+            ownExe = Path.GetFileName(Application.ExecutablePath);
+            settings = new Settings(Path.Combine(folder, "settings.txt"));
             myWords = ListFile.MyWords(folder);
             excludedApps = ListFile.ExcludedApps(folder);
+            LoadLifetime();
             SpellService spelling = new SpellService(counters);
             RepairStartupPath();
 
             iconOn = MakeIcon(Color.FromArgb(22, 163, 74));
             iconOff = MakeIcon(Color.FromArgb(120, 120, 120));
+            iconSkipped = MakeIcon(Color.FromArgb(217, 119, 6));
 
             ContextMenuStrip menu = new ContextMenuStrip();
             ToolStripMenuItem title = new ToolStripMenuItem(AppName + " (" + spelling.Languages + ")");
@@ -1437,19 +1593,18 @@ namespace KeyboardWriterHelper
             errorItem = new ToolStripMenuItem();
             errorItem.Enabled = false;
             errorItem.Visible = false;
+            statsItem = new ToolStripMenuItem();
+            statsItem.Enabled = false;
             enabledItem = new ToolStripMenuItem("Auto-correct on   (Ctrl+Alt+K)", null, delegate { Toggle(); });
             appItem = new ToolStripMenuItem("", null, delegate { ToggleApp(); });
             recentItem = new ToolStripMenuItem("Recent corrections");
-            ToolStripMenuItem wordsItem = new ToolStripMenuItem("Edit my words (never corrected)...", null,
-                delegate { Process.Start("notepad.exe", "\"" + myWords.FilePath + "\""); });
-            ToolStripMenuItem appsItem = new ToolStripMenuItem("Edit skipped programs...", null,
-                delegate { Process.Start("notepad.exe", "\"" + excludedApps.FilePath + "\""); });
-            startupItem = new ToolStripMenuItem("Start with Windows", null, delegate { ToggleStartup(); });
+            ToolStripMenuItem settingsItem = new ToolStripMenuItem("Settings and statistics...", null, delegate { ShowSettings(); });
+            startupItem = new ToolStripMenuItem("Start with Windows", null, delegate { SetStartup(!IsStartupEnabled()); });
             startupItem.Checked = IsStartupEnabled();
             ToolStripMenuItem exitItem = new ToolStripMenuItem("Exit", null, delegate { ExitThread(); });
             menu.Items.AddRange(new ToolStripItem[] {
-                title, errorItem, new ToolStripSeparator(), enabledItem, appItem, recentItem,
-                new ToolStripSeparator(), wordsItem, appsItem, startupItem,
+                title, errorItem, statsItem, new ToolStripSeparator(), enabledItem, appItem, recentItem,
+                new ToolStripSeparator(), settingsItem, startupItem,
                 new ToolStripSeparator(), exitItem });
             menu.Opening += delegate { RefreshMenu(); };
 
@@ -1458,16 +1613,20 @@ namespace KeyboardWriterHelper
             tray.DoubleClick += delegate { Toggle(); };
 
             IntPtr forceHandle = ui.Handle;
-            corrector = new Corrector(spelling, myWords, excludedApps, counters, IntPtr.Zero);
+            corrector = new Corrector(spelling, myWords, excludedApps, counters, settings, IntPtr.Zero);
             corrector.Corrected += OnCorrected;
+            corrector.Learned += delegate(string word)
+            {
+                ui.BeginInvoke(new MethodInvoker(delegate { Say("\"" + word + "\" will not be corrected any more (you undid it twice)."); }));
+            };
             // The hotkey gives no other sign that it worked, so say so.
             corrector.EnabledChanged += delegate { ui.BeginInvoke(new MethodInvoker(delegate { ShowState(); AnnounceState(); })); };
 
             ShowState();
             tray.Visible = true;
 
-            housekeeping.Interval = 2000;
-            housekeeping.Tick += delegate { myWords.Sync(); excludedApps.Sync(); WriteStats(); };
+            housekeeping.Interval = 1000;
+            housekeeping.Tick += delegate { Housekeeping(); };
             housekeeping.Start();
 
             tray.ShowBalloonTip(6000, AppName,
@@ -1481,41 +1640,118 @@ namespace KeyboardWriterHelper
             corrector.Dispose();
             myWords.Sync();
             excludedApps.Sync();
+            settings.Save();
             WriteStats();
             tray.Visible = false;
             tray.Dispose();
             base.ExitThreadCore();
         }
 
-        void Toggle()
+        // ---- What the settings window needs ----
+
+        public Settings Settings { get { return settings; } }
+        public ListFile MyWords { get { return myWords; } }
+        public ListFile ExcludedApps { get { return excludedApps; } }
+        public string CurrentApp { get { return currentApp; } }
+
+        public bool Enabled
         {
-            corrector.Enabled = !corrector.Enabled;
-            ShowState();
+            get { return corrector.Enabled; }
+            set { corrector.Enabled = value; ShowState(); }
         }
 
+        public string[][] RecentCorrections()
+        {
+            lock (recent) return recent.ToArray();
+        }
+
+        // Adds a word the user does not want corrected.
+        public void NeverCorrect(string word)
+        {
+            myWords.Add(word);
+            myWords.Sync();
+        }
+
+        public string StatsText()
+        {
+            long words = baseWords + counters.Words, fixes = baseCorrections + counters.Corrections, undone = baseUndone + counters.Undone;
+            return
+                "This session (since " + startedAt.ToString("HH:mm") + ")\r\n" +
+                "    words checked: " + counters.Words + "\r\n" +
+                "    corrections made: " + counters.Corrections + "\r\n" +
+                "    corrections you undid: " + counters.Undone + "\r\n\r\n" +
+                "All time\r\n" +
+                "    words checked: " + words + "\r\n" +
+                "    corrections made: " + fixes + "\r\n" +
+                "    corrections you undid: " + undone + "  (" + Share(undone, fixes) + " of corrections)\r\n\r\n" +
+                "Health\r\n" +
+                "    slowest key handling: " + counters.SlowestKeyMs + " ms\r\n" +
+                "    lookups too slow (word left alone): " + counters.TooSlow + "\r\n" +
+                "    errors: " + counters.Errors + (counters.LastError != null ? "  (" + counters.LastError + ")" : "");
+        }
+
+        static string Share(long part, long whole)
+        {
+            return whole == 0 ? "0%" : (100.0 * part / whole).ToString("0") + "%";
+        }
+
+        void ShowSettings()
+        {
+            if (settingsForm == null || settingsForm.IsDisposed)
+                settingsForm = new SettingsForm(this);
+            settingsForm.Show();
+            settingsForm.Activate();
+        }
+
+        // ---- State ----
+
+        void Toggle()
+        {
+            Enabled = !Enabled;
+        }
+
+        bool IsSkipped(string app)
+        {
+            return app.Length > 0 && excludedApps.Contains(app);
+        }
+
+        // Icon colour: green = correcting, amber = on but skipping the program in
+        // front, grey = paused.
         void ShowState()
         {
             bool on = corrector.Enabled;
+            bool skipped = on && IsSkipped(currentApp);
             enabledItem.Checked = on;
-            tray.Icon = on ? iconOn : iconOff;
-            tray.Text = AppName + (on ? " - on" : " - paused");
+            tray.Icon = !on ? iconOff : skipped ? iconSkipped : iconOn;
+            tray.Text = Clip(AppName + (!on ? " - paused" : skipped ? " - skipped in " + currentApp : " - on"));
+        }
+
+        static string Clip(string text)
+        {
+            return text.Length <= MaxTrayText ? text : text.Substring(0, MaxTrayText);
+        }
+
+        void Say(string message)
+        {
+            tray.ShowBalloonTip(2500, AppName, message, ToolTipIcon.Info);
         }
 
         void AnnounceState()
         {
-            tray.ShowBalloonTip(2000, AppName,
-                corrector.Enabled ? "Auto-correct is ON." : "Auto-correct is PAUSED. Press Ctrl+Alt+K to turn it back on.",
-                ToolTipIcon.Info);
+            Say(corrector.Enabled ? "Auto-correct is ON." : "Auto-correct is PAUSED. Press Ctrl+Alt+K to turn it back on.");
         }
 
-        // Adds or removes the program the user last typed in from the skip list.
+        // Adds or removes the program in front from the skip list.
         void ToggleApp()
         {
-            string app = corrector.LastApp;
+            string app = currentApp;
             if (app.Length == 0) return;
-            if (excludedApps.Contains(app)) excludedApps.Remove(app);
-            else excludedApps.Add(app);
+            bool nowSkipped = !excludedApps.Contains(app);
+            if (nowSkipped) excludedApps.Add(app);
+            else excludedApps.Remove(app);
             excludedApps.Sync();
+            ShowState();
+            Say(nowSkipped ? "Auto-correct is OFF in " + app + "." : "Auto-correct is ON in " + app + ".");
         }
 
         // Called on the keyboard thread.
@@ -1523,26 +1759,76 @@ namespace KeyboardWriterHelper
         {
             lock (recent)
             {
-                recent.Insert(0, from + "  →  " + to);
+                recent.Insert(0, new string[] { from, to });
                 if (recent.Count > 10) recent.RemoveAt(recent.Count - 1);
             }
+        }
+
+        void Housekeeping()
+        {
+            myWords.Sync();
+            excludedApps.Sync();
+            WriteStats();
+
+            // Our own windows (menu, settings) do not count as "the program in front".
+            string app = Native.ProcessNameOf(Native.GetForegroundWindow());
+            if (app.Length > 0 && !string.Equals(app, ownExe, StringComparison.OrdinalIgnoreCase) && app != currentApp)
+                currentApp = app;
+            ShowState();
         }
 
         void RefreshMenu()
         {
             recentItem.DropDownItems.Clear();
-            lock (recent)
-                foreach (string line in recent) recentItem.DropDownItems.Add(line).Enabled = false;
-            if (recentItem.DropDownItems.Count == 0) recentItem.DropDownItems.Add("(none yet)").Enabled = false;
+            string[][] items = RecentCorrections();
+            if (items.Length > 0)
+            {
+                ToolStripMenuItem hint = new ToolStripMenuItem("Click one to never correct that word again");
+                hint.Enabled = false;
+                recentItem.DropDownItems.Add(hint);
+                foreach (string[] pair in items)
+                {
+                    string typed = pair[0];
+                    recentItem.DropDownItems.Add(typed + "  →  " + pair[1], null, delegate
+                    {
+                        NeverCorrect(typed);
+                        Say("\"" + typed + "\" will not be corrected any more.");
+                    });
+                }
+            }
+            else recentItem.DropDownItems.Add("(none yet)").Enabled = false;
 
-            string app = corrector.LastApp;
+            string app = currentApp;
             appItem.Visible = app.Length > 0;
-            appItem.Text = "Don't correct in " + app;
-            appItem.Checked = excludedApps.Contains(app);
+            bool skipped = IsSkipped(app);
+            appItem.Text = skipped ? "Turn ON in " + app + "  (currently skipped)" : "Turn OFF in " + app;
+
+            statsItem.Text = counters.Corrections + " fixed, " + counters.Undone + " undone this session";
 
             string error = counters.LastError;
             errorItem.Visible = error != null;
             if (error != null) errorItem.Text = "Problem: " + (error.Length > 90 ? error.Substring(0, 90) + "..." : error);
+        }
+
+        // ---- Files ----
+
+        void LoadLifetime()
+        {
+            try
+            {
+                if (!File.Exists(lifetimePath)) return;
+                foreach (string line in File.ReadAllLines(lifetimePath))
+                {
+                    int eq = line.IndexOf('=');
+                    long value;
+                    if (eq <= 0 || !long.TryParse(line.Substring(eq + 1), out value)) continue;
+                    string key = line.Substring(0, eq);
+                    if (key == "words") baseWords = value;
+                    else if (key == "corrections") baseCorrections = value;
+                    else if (key == "undone") baseUndone = value;
+                }
+            }
+            catch (IOException) { }
         }
 
         // Health counters for troubleshooting. Numbers only, never typed text.
@@ -1565,11 +1851,22 @@ namespace KeyboardWriterHelper
                     AppName + " - counters only, never what you typed\r\n" +
                     "running since: " + startedAt.ToString("yyyy-MM-dd HH:mm:ss") + "\r\n" +
                     "updated: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "\r\n" + body);
+                string life =
+                    "words=" + (baseWords + counters.Words) + "\r\n" +
+                    "corrections=" + (baseCorrections + counters.Corrections) + "\r\n" +
+                    "undone=" + (baseUndone + counters.Undone) + "\r\n";
+                if (life != lastLifetime)
+                {
+                    lastLifetime = life;
+                    File.WriteAllText(lifetimePath, life);
+                }
             }
             catch (IOException) { }
         }
 
-        static bool IsStartupEnabled()
+        // ---- Start with Windows ----
+
+        public static bool IsStartupEnabled()
         {
             using (RegistryKey key = Registry.CurrentUser.OpenSubKey(RunKey))
                 return key != null && key.GetValue(RunValue) != null;
@@ -1588,12 +1885,12 @@ namespace KeyboardWriterHelper
             }
         }
 
-        void ToggleStartup()
+        public void SetStartup(bool on)
         {
             using (RegistryKey key = Registry.CurrentUser.CreateSubKey(RunKey))
             {
-                if (startupItem.Checked) key.DeleteValue(RunValue, false);
-                else key.SetValue(RunValue, "\"" + Application.ExecutablePath + "\"");
+                if (on) key.SetValue(RunValue, "\"" + Application.ExecutablePath + "\"");
+                else key.DeleteValue(RunValue, false);
             }
             startupItem.Checked = IsStartupEnabled();
         }
@@ -1616,6 +1913,202 @@ namespace KeyboardWriterHelper
                 }
                 return Icon.FromHandle(bmp.GetHicon());
             }
+        }
+    }
+
+    // ---- Settings window: options, my words, skipped programs, statistics ----
+
+    sealed class SettingsForm : Form
+    {
+        readonly TrayApp app;
+        readonly Label statsLabel = new Label();
+        readonly ListBox recentList = new ListBox();
+        readonly System.Windows.Forms.Timer refresh = new System.Windows.Forms.Timer();
+        readonly ListBox wordsList = new ListBox(), appsList = new ListBox();
+        string[] shownWords = new string[0], shownApps = new string[0];
+
+        public SettingsForm(TrayApp app)
+        {
+            this.app = app;
+            Text = "Keyboard Writer Helper - settings";
+            StartPosition = FormStartPosition.CenterScreen;
+            ClientSize = new Size(500, 420);
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox = false;
+            Font = new Font("Segoe UI", 9f);
+
+            TabControl tabs = new TabControl();
+            tabs.Dock = DockStyle.Fill;
+            tabs.TabPages.Add(GeneralTab());
+            tabs.TabPages.Add(ListTab("My words", wordsList,
+                "Words listed here are never auto-corrected.", "Add word", AddWord, RemoveWord, null));
+            tabs.TabPages.Add(ListTab("Programs", appsList,
+                "Nothing typed in these programs is corrected. The tray icon turns amber while one of them is in front.",
+                "Add program", AddProgram, RemoveProgram, "Add the program in front (now)"));
+            tabs.TabPages.Add(StatsTab());
+            Controls.Add(tabs);
+
+            refresh.Interval = 1000;
+            refresh.Tick += delegate { Reload(); };
+            Shown += delegate { Reload(); refresh.Start(); };
+            FormClosed += delegate { refresh.Stop(); };
+        }
+
+        TabPage GeneralTab()
+        {
+            TabPage page = new TabPage("General");
+            FlowLayoutPanel flow = new FlowLayoutPanel();
+            flow.Dock = DockStyle.Fill;
+            flow.FlowDirection = FlowDirection.TopDown;
+            flow.WrapContents = false;
+            flow.Padding = new Padding(14);
+            flow.Controls.Add(Check("Auto-correct is on   (Ctrl+Alt+K turns it on or off)",
+                app.Enabled, delegate(bool v) { app.Enabled = v; }));
+            flow.Controls.Add(Check("Fix a word as soon as , ; : ! or ? is typed after it (otherwise: when Space is pressed)",
+                app.Settings.FixOnPunctuation, delegate(bool v) { app.Settings.FixOnPunctuation = v; app.Settings.Save(); }));
+            flow.Controls.Add(Check("Capitalise the first word of a sentence (after . ! or ?  and a space)",
+                app.Settings.CapitalizeSentences, delegate(bool v) { app.Settings.CapitalizeSentences = v; app.Settings.Save(); }));
+            flow.Controls.Add(Check("Start with Windows", TrayApp.IsStartupEnabled(), delegate(bool v) { app.SetStartup(v); }));
+            Label note = new Label();
+            note.AutoSize = false;
+            note.Size = new Size(440, 90);
+            note.Margin = new Padding(3, 16, 3, 3);
+            note.Text = "Backspace right after a fix undoes it. Undo the same fix twice and the word is added to My words.\r\n\r\n" +
+                        "A full stop never triggers a fix by itself (example.com is not a sentence); the next Space does.";
+            flow.Controls.Add(note);
+            page.Controls.Add(flow);
+            return page;
+        }
+
+        static CheckBox Check(string text, bool value, Action<bool> changed)
+        {
+            CheckBox box = new CheckBox();
+            box.Text = text;
+            box.Checked = value;
+            box.AutoSize = false;
+            box.Size = new Size(450, 38);
+            box.CheckedChanged += delegate { changed(box.Checked); };
+            return box;
+        }
+
+        TabPage ListTab(string title, ListBox list, string help, string addLabel, Action<string> add, Action<string> remove, string addNowLabel)
+        {
+            TabPage page = new TabPage(title);
+            Label label = new Label();
+            label.SetBounds(12, 10, 470, 40);
+            label.Text = help;
+            list.SetBounds(12, 55, 470, 230);
+            list.IntegralHeight = false;
+            list.SelectionMode = SelectionMode.MultiExtended;
+            TextBox input = new TextBox();
+            input.SetBounds(12, 300, 290, 24);
+            Button addButton = new Button();
+            addButton.Text = addLabel;
+            addButton.SetBounds(308, 298, 90, 27);
+            Action doAdd = delegate
+            {
+                string text = input.Text.Trim();
+                if (text.Length == 0) return;
+                add(text);
+                input.Text = "";
+                Reload();
+            };
+            addButton.Click += delegate { doAdd(); };
+            input.KeyDown += delegate(object s, KeyEventArgs e)
+            {
+                if (e.KeyCode != Keys.Enter) return;
+                e.SuppressKeyPress = true;
+                doAdd();
+            };
+            Button removeButton = new Button();
+            removeButton.Text = "Remove";
+            removeButton.SetBounds(404, 298, 78, 27);
+            removeButton.Click += delegate
+            {
+                foreach (object item in new ArrayList(list.SelectedItems)) remove((string)item);
+                Reload();
+            };
+            page.Controls.AddRange(new Control[] { label, list, input, addButton, removeButton });
+            if (addNowLabel != null)
+            {
+                Button now = new Button();
+                now.Text = addNowLabel;
+                now.SetBounds(12, 335, 240, 27);
+                now.Click += delegate
+                {
+                    if (app.CurrentApp.Length > 0) add(app.CurrentApp);
+                    Reload();
+                };
+                page.Controls.Add(now);
+            }
+            return page;
+        }
+
+        TabPage StatsTab()
+        {
+            TabPage page = new TabPage("Statistics");
+            statsLabel.SetBounds(12, 10, 470, 215);
+            Label recentLabel = new Label();
+            recentLabel.SetBounds(12, 228, 470, 18);
+            recentLabel.Text = "Recent corrections (kept in memory only):";
+            recentList.SetBounds(12, 248, 380, 130);
+            recentList.IntegralHeight = false;
+            Button never = new Button();
+            never.Text = "Never correct";
+            never.SetBounds(398, 248, 84, 27);
+            never.Click += delegate
+            {
+                string[][] items = app.RecentCorrections();
+                int i = recentList.SelectedIndex;
+                if (i < 0 || i >= items.Length) return;
+                app.NeverCorrect(items[i][0]);
+                Reload();
+            };
+            page.Controls.AddRange(new Control[] { statsLabel, recentLabel, recentList, never });
+            return page;
+        }
+
+        void AddWord(string text)
+        {
+            foreach (string w in text.Split(new char[] { ' ', ',', ';', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                app.MyWords.Add(w);
+            app.MyWords.Sync();
+        }
+
+        void RemoveWord(string word) { app.MyWords.Remove(word); app.MyWords.Sync(); }
+
+        void AddProgram(string text)
+        {
+            if (!text.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) text += ".exe";
+            app.ExcludedApps.Add(text);
+            app.ExcludedApps.Sync();
+        }
+
+        void RemoveProgram(string name) { app.ExcludedApps.Remove(name); app.ExcludedApps.Sync(); }
+
+        // Brings every list and number up to date without disturbing what is selected.
+        void Reload()
+        {
+            Fill(wordsList, ref shownWords, app.MyWords.All());
+            Fill(appsList, ref shownApps, app.ExcludedApps.All());
+            statsLabel.Text = app.StatsText();
+            string[][] items = app.RecentCorrections();
+            bool same = recentList.Items.Count == items.Length;
+            for (int i = 0; same && i < items.Length; i++)
+                same = (string)recentList.Items[i] == items[i][0] + "  →  " + items[i][1];
+            if (same) return;
+            recentList.Items.Clear();
+            foreach (string[] pair in items) recentList.Items.Add(pair[0] + "  →  " + pair[1]);
+        }
+
+        static void Fill(ListBox list, ref string[] shown, string[] now)
+        {
+            if (string.Join("\n", shown) == string.Join("\n", now)) return;
+            shown = now;
+            list.BeginUpdate();
+            list.Items.Clear();
+            list.Items.AddRange(now);
+            list.EndUpdate();
         }
     }
 
@@ -1655,7 +2148,7 @@ namespace KeyboardWriterHelper
             Directory.CreateDirectory(folder);
             ListFile excluded = ListFile.ExcludedApps(folder);
             if (excludeSelf) excluded.Add(Path.GetFileName(Application.ExecutablePath));
-            corrector = new Corrector(new SpellService(Counters), ListFile.MyWords(folder), excluded, Counters, TestMarker);
+            corrector = new Corrector(new SpellService(Counters), ListFile.MyWords(folder), excluded, Counters, new Settings(null), TestMarker);
 
             timer.Interval = 30;
             timer.Tick += delegate { Step(); };
