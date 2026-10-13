@@ -1,0 +1,24 @@
+# Common Hindi and Gujarati words as typed in English letters. Seeing one
+# means the line is not English, so nothing more in it is corrected.
+# Words that are also English ("to", "pan", "tame") or look like a slip of a
+# common English word ("tha", "ane") are deliberately absent.
+
+# Hindi
+hai hain hoon kya kyun kyu kaise kaisa kab kahan kaha
+kaun kitna kitne nahi nahin nhi haan yaar bhai bhaiya didi
+acha accha achha theek thik chalo jaldi abhi aaj kal parso bahut
+bohot thoda zyada jyada mera meri tera teri tumhara hamara apna
+apni aap tum mujhe tujhe usko isko unko kuch sabhi koi kisi
+liye wala wali raha rahi rahe gaya gayi gaye karo karna karta
+karti karte kiya hoga hogi hua hui aur lekin magar phir toh
+bhi kyunki isliye agar yahan wahan idhar udhar andar bahar upar
+neeche paisa paise ghar kaam baat raat subah shaam dost pyaar
+zindagi namaste dhanyavad shukriya arre arey oye matlab sahi galat
+milte milna dekho dekh suno bolo khana pani ji
+
+# Gujarati
+kem cho chho che chhe chu chhu shu tamne tamaru tamari
+tamara maru mari ame apde aapde nathi hatu hati kare
+karvu karu kari avjo aavjo saru saras majama maja kyare ketla
+ketlu kaka kaki masi barabar khub aaje thayu
+gayo gayu jaie aavo aavu aavsho karsho joiye gamtu chalse

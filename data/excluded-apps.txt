@@ -1,0 +1,30 @@
+# Programs that are skipped from the first run on: terminals (a changed
+# command runs as something else), password managers and remote-desktop
+# clients. One program per line (the name shown in Task Manager > Details).
+# Code editors are not listed: people also write prose in them.
+# After the first run the list belongs to the user: Settings > Programs.
+
+WindowsTerminal.exe
+OpenConsole.exe
+conhost.exe
+cmd.exe
+powershell.exe
+pwsh.exe
+wsl.exe
+bash.exe
+mintty.exe
+alacritty.exe
+wezterm-gui.exe
+putty.exe
+
+KeePass.exe
+KeePassXC.exe
+1Password.exe
+Bitwarden.exe
+
+mstsc.exe
+vmconnect.exe
+vmware.exe
+VirtualBoxVM.exe
+TeamViewer.exe
+AnyDesk.exe

@@ -1,0 +1,36 @@
+# Built-in words that are never corrected. Any number of words per line.
+# Your own words go in My words (Settings), not here.
+
+# Commands, code words and abbreviations the dictionary does not know and
+# would turn into something else ("mkdir" -> "media", "elif" -> "elf").
+npm npx pnpm yarn git sudo apt ssh scp pwd cls wget curl mkdir
+rmdir chmod chown grep sed awk cd ls rm cp mv nano vim pip
+conda dotnet nuget rustc kubectl wsl zsh cmd ipconfig localhost
+const var func def elif init async await int str bool enum struct
+impl args argv kwargs param params config configs env src dist stdin
+stdout stderr printf println typeof sizeof readonly namespace boolean tuple
+dict regex mutex endif ifdef malloc json yaml toml html css js ts
+tsx jsx py api apis url urls uri http https sql db repo repos
+dev prod admin auth oauth login logout signup signin username frontend
+backend fullstack middleware webhook webhooks endpoint endpoints sync idx
+cnt ctx req res tmp btn msg pkg cfg lib libs util utils app
+apps ui ux ai ok wifi gray vs etc approx ie eg
+vscode chatgpt openai gpu cpu usb numpy pytest nodejs nextjs reactjs
+supabase vercel copilot figma canva proj impl misc govt dept mgmt
+hrs mins secs nos qty inr usd
+
+# Chat shorthand people type on purpose.
+ur bro gud nite lol lmao rofl omg idk imo imho tbh fyi asap
+brb haha hehe hmm ya yea yeah yep yup nope nah gonna wanna
+gotta kinda sorta dunno lemme gimme coz cuz pls plz thx thnx
+tmrw tmr abt frnd kk okk hii heyy tc gn gm np ty
+
+# Everyday Indian words and services.
+dosa idli daal upi kyc otp emi ifsc neft paytm aadhaar aadhar
+timepass updation crorepati saheb ustad mehendi jio swiggy zomato
+flipkart phonepe gpay tcs
+
+# More slang, tools and short forms the dictionary turns into real words.
+yo bruh bday wassup fave yeet simp highkey lowkey fomo srry sry
+aint eslint venv mongodb postgres postgresql mysql sqlite redis nginx
+regd recd engg pune iyer tarun

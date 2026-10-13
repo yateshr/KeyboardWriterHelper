@@ -1,0 +1,62 @@
+# Builds the exe on every push and runs the tests that need no keyboard.
+# Pushing a tag such as v1.2 also publishes the exe as a GitHub release.
+name: Build and test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the revision number is the number of commits
+
+      - name: Build
+        shell: cmd
+        run: build.cmd
+
+      - name: Version
+        shell: pwsh
+        run: .\KeyboardWriterHelper.exe --version | Out-Host
+
+      # The answers depend on the English dictionaries Windows has installed,
+      # and a build machine may not have the ones a desktop PC has. Until these
+      # steps have been seen to pass here they report, but do not fail the build.
+      - name: Typing cases
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          .\KeyboardWriterHelper.exe --cases tests\typing-cases.txt | Out-Host
+          exit $LASTEXITCODE
+
+      - name: Accuracy
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          .\KeyboardWriterHelper.exe --eval tests\typos.txt tests\reviewer-typos.txt | Out-Host
+          .\KeyboardWriterHelper.exe --eval-ok tests\correct-words.txt | Out-Host
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KeyboardWriterHelper
+          path: KeyboardWriterHelper.exe
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: KeyboardWriterHelper
+      - name: Publish the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" KeyboardWriterHelper.exe --title "Keyboard Writer Helper ${{ github.ref_name }}" --generate-notes

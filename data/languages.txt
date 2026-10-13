@@ -1,0 +1,9 @@
+# English spellings the app can use, if Windows has the dictionary installed.
+# The first installed one supplies the suggestions (unless another is chosen
+# in Settings); the others only widen what counts as correctly spelled.
+
+en-US
+en-GB
+en-IN
+en-AU
+en-CA

@@ -1,0 +1,5 @@
+# A full stop after one of these is not the end of a sentence, so the word
+# after it does not get a capital letter.
+
+dr mr mrs ms prof sr jr st vs etc inc ltd co no fig
+approx min max dept govt mgmt eg ie al ca est ref tel ext

@@ -1,0 +1,161 @@
+# Real words used in the wrong place, as two-word phrases:
+#     typed phrase=correct phrase
+# The left side is the word before plus the word just typed; both are replaced.
+#
+# Only phrases that are practically never right as typed belong here: changing
+# correct text is worse than missing a mistake. That is why these are absent:
+#     could of      ("it could of course be")
+#     to much       ("it did not amount to much")
+#     better then   ("things were better then")
+#     your welcome  ("your welcome email")
+# Anyone who never writes those can add them to My fixes (Settings).
+#
+# A phrase listed as its own fix ("and fro") keeps fixes.txt away from it.
+
+# from, typed as form
+away form=away from
+apart form=apart from
+far form=far from
+come form=come from
+came form=came from
+comes form=comes from
+coming form=coming from
+ranging form=ranging from
+resulting form=resulting from
+arising form=arising from
+
+# than / then
+more then=more than
+less then=less than
+rather then=rather than
+and than=and then
+but than=but then
+since than=since then
+until than=until then
+by than=by then
+back than=back then
+just than=just then
+
+# now / know / no
+right know=right now
+don't no=don't know
+didn't no=didn't know
+doesn't no=doesn't know
+
+# were / where
+they where=they were
+we where=we were
+were is=where is
+were are=where are
+were do=where do
+were did=where did
+were can=where can
+know were=know where
+
+# there / their
+their is=there is
+their are=there are
+their was=there was
+their were=there were
+there own=their own
+
+# it's / its
+its a=it's a
+its an=it's an
+its not=it's not
+its been=it's been
+its the=it's the
+
+# you're / your
+your a=you're a
+your an=you're an
+your not=you're not
+your the=you're the
+your are=you are
+
+# lose, typed as loose
+loose weight=lose weight
+will loose=will lose
+would loose=would lose
+could loose=could lose
+might loose=might lose
+
+# here, typed as hear
+over hear=over here
+right hear=right here
+
+# does, typed as dose
+dose not=does not
+it dose=it does
+how dose=how does
+dose anyone=does anyone
+
+# Slips that happen to be words: wold, bee, fir, ti, ma, yo, thing
+wold be=would be
+wold like=would like
+wold have=would have
+i wold=I would
+it wold=it would
+we wold=we would
+you wold=you would
+they wold=they would
+has bee=has been
+have bee=have been
+had bee=had been
+will bee=will be
+fir the=for the
+fir a=for a
+ti is=it is
+ti was=it was
+is ti=is it
+i ma=I am
+thank yo=thank you
+i thing=I think
+
+# The space one key too late
+tot he=to the
+oft he=of the
+int he=in the
+fort he=for the
+
+# The same word twice
+the the=the
+and and=and
+a a=a
+an an=an
+of of=of
+to to=to
+
+# One letter short, and embarrassing
+pubic health=public health
+pubic school=public school
+pubic schools=public schools
+pubic relations=public relations
+pubic library=public library
+pubic sector=public sector
+pubic transport=public transport
+pubic holiday=public holiday
+pubic policy=public policy
+pubic safety=public safety
+pubic speaking=public speaking
+pubic service=public service
+pubic services=public services
+general pubic=general public
+project manger=project manager
+product manger=product manager
+general manger=general manager
+account manger=account manager
+sales manger=sales manager
+senior manger=senior manager
+office manger=office manager
+branch manger=branch manager
+hiring manger=hiring manager
+untied states=United States
+untied kingdom=United Kingdom
+untied nations=United Nations
+to asses=to assess
+trail version=trial version
+trail period=trial period
+
+# "fro" is fixed to "for" (fixes.txt), except here
+and fro=and fro

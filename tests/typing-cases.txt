@@ -1,0 +1,152 @@
+# Typing tests, run by test.cmd:  KeyboardWriterHelper.exe --cases tests\typing-cases.txt
+#
+#     "what is typed" => "what must be on screen"
+#
+# {BS} is Backspace, {NEXT} the next-suggestion shortcut. A line starting with @
+# sets up the cases below it:
+#     @ word tarun               add to My words
+#     @ fix brb=be right back    add to My fixes
+#     @ punctuation|capitals|twocapitals|phrases|doublespace|context on|off
+#     @ reset                    back to the defaults, both lists empty
+# The answers depend on the English dictionaries Windows has installed.
+
+# ---- misspellings ----
+"teh cat " => "the cat "
+"i think " => "I think "
+"recieve it " => "receive it "
+"dont go " => "don't go "
+"alot of " => "a lot of "
+"improrvie " => "improve "
+"hello world " => "hello world "
+"npm install " => "npm install "
+"kya hai teh " => "kya hai teh "
+
+# ---- punctuation and sentence capitals ----
+"teh, " => "the, "
+"go now. then stop " => "go now. Then stop "
+"example.com is " => "example.com is "
+"see dr. smith " => "see dr. smith "
+"(teh) " => "(the) "
+@ punctuation off
+"teh," => "teh,"
+"teh, " => "the, "
+@ capitals off
+"go now. then stop " => "go now. then stop "
+@ reset
+
+# ---- Backspace undoes a fix ----
+"teh {BS}" => "teh"
+"teh {BS} " => "teh "
+"teh {BS}{BS}e " => "tee "
+
+# ---- two capitals at the start of a word ----
+"THe cat " => "The cat "
+"HEllo " => "Hello "
+"a GOod day " => "a Good day "
+"THier " => "Their "
+"IDs and PCs " => "IDs and PCs "
+"OSes " => "OSes "
+"NASA " => "NASA "
+"iPhone " => "iPhone "
+"McDonald " => "McDonald "
+"THe {BS}" => "THe"
+@ twocapitals off
+"THe cat " => "THe cat "
+@ reset
+
+# ---- real words in the wrong place (data\phrase-fixes.txt) ----
+"their is " => "there is "
+"Their is " => "There is "
+"more then one " => "more than one "
+"got it away form " => "got it away from "
+"i wold " => "I would "
+"tot he " => "to the "
+"the the " => "the "
+"untied states " => "United States "
+"thier is " => "there is "
+"and thna " => "and then "
+"their is, " => "there is, "
+"their is {BS}" => "their is"
+"their is {BS} " => "their is "
+"their is {NEXT}" => "their is "
+"their is {NEXT}{NEXT}" => "there is "
+# Not when something stands between the two words, or the phrase can be right.
+"their, is " => "their, is "
+"their. is " => "their. Is "
+"could of " => "could of "
+"better then " => "better then "
+"fill in the form " => "fill in the form "
+# "fro" becomes "for", but not in "to and fro".
+"looking fro it " => "looking for it "
+"to and fro " => "to and fro "
+@ phrases off
+"their is " => "their is "
+"to and fro " => "to and for "
+@ reset
+
+# ---- My fixes: the user's own fixes and shortcuts ----
+@ fix brb=be right back
+@ fix omw=On my way!
+@ fix could of=could have
+@ fix ur=your
+"brb " => "be right back "
+"Brb " => "Be right back "
+"ok brb, " => "ok be right back, "
+"omw " => "On my way! "
+"could of " => "could have "
+"Could of " => "Could have "
+"is ur " => "is your "
+"brb {BS}" => "brb"
+"brb {NEXT}" => "brb "
+# My words wins over My fixes.
+@ word brb
+"brb " => "brb "
+@ reset
+
+# ---- My words ----
+@ word teh
+@ word their is
+"teh " => "teh "
+"Teh " => "Teh "
+"their is " => "their is "
+@ reset
+
+# ---- next suggestion ----
+"teh {NEXT}" => "teh "
+"teh {NEXT}{NEXT}" => "the "
+"ther {NEXT}" => "their "
+"ther {NEXT}{NEXT}" => "the "
+"Ther {NEXT}" => "Their "
+"ther,{NEXT} " => "their, "
+"ther {NEXT}{BS}" => "ther"
+"ther {NEXT}x " => "their x "
+# Nothing to swap: the shortcut does nothing.
+"hello {NEXT}" => "hello "
+
+# ---- two spaces make a full stop (off unless switched on) ----
+"hello  there " => "hello  there "
+@ doublespace on
+"hello  " => "hello. "
+"hello  there " => "hello. There "
+"teh  " => "the. "
+"hello  {BS}" => "hello  "
+"hello  {BS} " => "hello   "
+"hello,  " => "hello,  "
+"hello   " => "hello.  "
+@ reset
+
+# ---- the word before helps to choose ----
+"was thre " => "was there "
+"the thre " => "the three "
+"in thes " => "in this "
+"know wether " => "know whether "
+"the wether " => "the weather "
+"people hwo " => "people who "
+"know hwo " => "know how "
+"of ther " => "of their "
+"over ther " => "over there "
+@ context off
+"was thre " => "was three "
+"know wether " => "know weather "
+"people hwo " => "people how "
+@ reset
