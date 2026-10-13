@@ -1,0 +1,186 @@
+the: teh hte
+and: adn nad
+that: taht thta
+what: waht whta
+just: jsut
+with: wiht wtih
+this: thsi tihs
+you: yuo
+because: becuase becasue beacuse
+about: abotu abuot
+would: woudl wuold
+could: coudl
+should: shoudl shoulld shuold
+people: peopel poeple
+improve: improrvie imporve improev
+instead: insted isntead
+correct: currect corect corrcet
+spelling: sppeling speling spellling
+automatically: automattically automaticaly automaticly
+mistake: mistkae misstake mistaek
+world: wrold wolrd
+hello: helo hllo
+example: exmaple exampel examlpe
+report: reprot reoprt
+thanks: thnaks thansk
+please: pleae plase pelase
+tomorrow: tommorow tomorow tommorrow
+something: somthing somehting
+everything: everthing evrything
+different: diffrent differnt
+interesting: intresting intersting
+probably: probaly probabaly
+really: realy relly
+definitely: definately definatly defintely
+government: goverment govenment
+beautiful: beutiful beatiful
+friends: freinds frends
+together: togehter togather
+always: alwasy allways
+answer: anwser answr
+question: quesiton qestion
+language: langauge languge
+grammar: grammer gramar
+sentence: sentance sentense
+writing: writting writng
+wrong: wrogn worng
+keyboard: keybord keyborad
+software: softwear sofware
+system: sistem sytem
+original: orignal origional
+perfectly: perfecly perfectley
+suggest: sugest sugget
+suggestion: sugestion suggestoin
+improvement: improvment improvemnt
+moment: momment momnet
+detect: detecd dectect
+revised: revied revisd
+suppose: supose suppoes
+receive: recieve receve
+believe: beleive belive
+friend: freind frend
+which: wich whcih
+their: thier
+weird: wierd
+until: untill
+separate: seperate seprate
+necessary: neccessary necesary neccesary
+occurred: occured ocurred
+address: adress addres
+accommodate: accomodate acommodate
+achieve: acheive achive
+argument: arguement
+business: buisness bussiness busines
+calendar: calender
+category: catagory
+colleague: collegue colleage
+coming: comming
+committee: commitee comittee
+completely: completly compleatly
+conscious: concious
+curiosity: curiousity
+dilemma: dilema
+disappear: dissapear disapear
+disappoint: dissapoint disapoint
+embarrass: embarass embaras
+environment: enviroment enviorment
+existence: existance
+familiar: familar
+finally: finaly finnaly
+foreign: foriegn
+forty: fourty
+forward: foward
+guard: gaurd
+happened: happend hapened
+immediately: immediatly imediately
+independent: independant
+interrupt: interupt
+knowledge: knowlege knowledg nolege
+library: libary
+license: lisence
+maintenance: maintainance maintenence
+noticeable: noticable
+occasion: occassion ocasion
+possession: posession possesion
+preferred: prefered
+publicly: publically
+referred: refered
+religious: religous
+remember: remeber rember
+resistance: resistence
+successful: succesful sucessful successfull
+surprise: suprise surprize
+tendency: tendancy
+tongue: tounge
+truly: truely
+unfortunately: unfortunatly unfortunatley
+available: avaible availble
+understand: understnad undestand
+information: infomation informtion
+important: importnat imporant
+problem: problme porblem
+company: comapny compnay
+experience: experiance expirience
+opportunity: oportunity oppurtunity
+beginning: begining
+recommend: recomend reccomend
+between: betwen beetween
+through: throught thru
+thought: thougth thoght
+enough: enuf enogh
+tonight: tonite
+before: befor beofre
+after: afetr aftre
+other: ohter otehr
+there: tehre ther
+where: wehre whre
+when: wehn
+then: tehn
+from: frmo
+have: ahve hvae
+know: konw nkow
+like: liek
+make: maek amke
+time: tiem
+work: wrok owrk
+need: nede
+want: wnat
+going: goign gonig
+doing: doign
+think: thnik thikn
+very: vrey
+much: mcuh
+some: soem
+also: aslo
+more: mroe
+many: mnay
+first: frist
+little: littel litle
+school: shcool scool
+office: ofice offcie
+meeting: meetign meting
+project: projcet porject
+message: mesage messgae
+email: emial
+document: docuemnt documnet
+computer: comptuer computr
+windows: windwos
+application: aplication applicaiton
+developer: develoepr devloper
+feature: featrue feture
+update: udpate upadte
+issue: isseu
+check: chekc cehck
+change: chnage cahnge
+create: craete creat
+delete: delte deleet
+function: fucntion funtion
+simple: simpel
+possible: posible possibel
+actually: actualy acutally
+usually: usualy
+basically: basicly basicaly
+especially: especialy expecially
+generally: generaly
+quickly: quikly quicky
+easily: easly easilly
