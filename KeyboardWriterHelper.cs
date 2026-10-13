@@ -1664,8 +1664,7 @@ namespace KeyboardWriterHelper
     static class Native
     {
         public const int WH_KEYBOARD_LL = 13, WH_MOUSE_LL = 14;
-        public const int WM_KEYDOWN = 0x100, WM_KEYUP = 0x101, WM_SYSKEYDOWN = 0x104, WM_SYSKEYUP = 0x105, WM_QUIT = 0x12,
-                         WM_APP = 0x8000;
+        public const int WM_KEYDOWN = 0x100, WM_KEYUP = 0x101, WM_SYSKEYDOWN = 0x104, WM_SYSKEYUP = 0x105, WM_QUIT = 0x12;
         public const int WM_LBUTTONDOWN = 0x201, WM_RBUTTONDOWN = 0x204, WM_MBUTTONDOWN = 0x207;
         public const uint LLKHF_INJECTED = 0x10;
         public const uint INPUT_KEYBOARD = 1, KEYEVENTF_KEYUP = 2, KEYEVENTF_UNICODE = 4;
@@ -1815,12 +1814,12 @@ namespace KeyboardWriterHelper
         int heldKey;
         bool heldIsShortcut;
         // Presses of the next-suggestion shortcut not acted on yet. The swap is
-        // made when Ctrl/Alt/Shift are let go: typed while they are still down,
-        // the Backspaces would arrive as Ctrl+Alt+Backspace. And it is made from
-        // the message loop (SwapMessage), not from inside the hook call for that
-        // last key-up, during which Windows still counts the key as down.
+        // made when the last of Ctrl/Alt/Shift is let go: typed while they are
+        // still down, the Backspaces would arrive as Ctrl+Alt+Backspace.
         int pendingNext;
-        const uint SwapMessage = Native.WM_APP + 1;
+        // That last key. Windows may still count it as down while its key-up is
+        // being handled, so the swap starts by letting go of it once more.
+        int liftKey;
 
         // All raised on the keyboard thread. Corrected and Undone: (typed, fix).
         // Changed: (typed, fix before, fix now) - another candidate was picked.
@@ -1905,8 +1904,7 @@ namespace KeyboardWriterHelper
 
             // Hook callbacks are delivered from inside GetMessage.
             Native.MSG msg;
-            while (Native.GetMessage(out msg, IntPtr.Zero, 0, 0) > 0)
-                if (msg.message == SwapMessage) SwapPending();
+            while (Native.GetMessage(out msg, IntPtr.Zero, 0, 0) > 0) { }
 
             Native.UnhookWindowsHookEx(keyHook);
             if (mouseHook != IntPtr.Zero) Native.UnhookWindowsHookEx(mouseHook);
@@ -1963,8 +1961,10 @@ namespace KeyboardWriterHelper
                 {
                     Native.KBDLLHOOKSTRUCT up = (Native.KBDLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(Native.KBDLLHOOKSTRUCT));
                     if (IsUserKey(up) && (int)up.vkCode == heldKey) heldKey = 0;
+                    // Done from inside this call, like every other fix: what is
+                    // typed here goes ahead of anything the user types next.
                     if (IsUserKey(up) && pendingNext > 0 && !ModifierHeld((int)up.vkCode))
-                        Native.PostThreadMessage(threadId, SwapMessage, IntPtr.Zero, IntPtr.Zero);
+                        SwapPending((int)up.vkCode);
                 }
                 else if (msg == Native.WM_KEYDOWN || msg == Native.WM_SYSKEYDOWN)
                 {
@@ -1988,21 +1988,29 @@ namespace KeyboardWriterHelper
 
         static bool IsDown(int vk) { return (Native.GetAsyncKeyState(vk) & 0x8000) != 0; }
 
-        // The next-suggestion shortcut was pressed and its keys are up again.
-        // Nothing is pending any more if another key was typed in between.
-        void SwapPending()
+        // The next-suggestion shortcut was pressed and the last of its keys
+        // (released) is going up.
+        void SwapPending(int released)
         {
             int times = pendingNext;
             pendingNext = 0;
+            long begin = Stopwatch.GetTimestamp();
             try
             {
-                while (times-- > 0) engine.Next();
+                while (times-- > 0)
+                {
+                    liftKey = released;
+                    engine.Next();
+                }
             }
             catch (Exception ex)
             {
                 counters.Error(ex);
                 engine.Break(false);
             }
+            liftKey = 0;
+            int ms = (int)((Stopwatch.GetTimestamp() - begin) * 1000 / Stopwatch.Frequency);
+            if (ms > counters.SlowestKeyMs) counters.SlowestKeyMs = ms;
         }
 
         // Is a Shift, Ctrl or Alt key down, not counting the one being let go
@@ -2158,7 +2166,16 @@ namespace KeyboardWriterHelper
             // Real scan codes, for programs that read those instead of the key code.
             ushort backScan = (ushort)Native.MapVirtualKey(Native.VK_BACK, 0);
             ushort spaceScan = (ushort)Native.MapVirtualKey(Native.VK_SPACE, 0);
-            List<Native.INPUT> inputs = new List<Native.INPUT>((backspaces + text.Length) * 2);
+            List<Native.INPUT> inputs = new List<Native.INPUT>((backspaces + text.Length) * 2 + 2);
+            if (liftKey != 0)
+            {
+                // Only the key-up: pressing Alt or Ctrl on its own means something
+                // to some programs.
+                List<Native.INPUT> pair = new List<Native.INPUT>(2);
+                Native.AddKey(pair, (ushort)liftKey, 0, 0, Magic);
+                inputs.Add(pair[1]);
+                liftKey = 0;
+            }
             for (int i = 0; i < backspaces; i++) Native.AddKey(inputs, Native.VK_BACK, backScan, 0, Magic);
             foreach (char c in text)
             {
