@@ -56,6 +56,9 @@ namespace KeyboardWriterHelper
         // The control that had the keyboard at the last key, and whether it is a password box.
         IntPtr lastFocus;
         bool lastFocusIsPassword;
+        // The keyboard layout at the last key, and its letters (for key proximity).
+        IntPtr lastLayout;
+        string[] layoutRows;
         // Held in fields so the delegates are not garbage collected while hooked.
         readonly Native.HookProc keyProc, mouseProc;
         readonly byte[] keyState = new byte[256];
@@ -475,7 +478,12 @@ namespace KeyboardWriterHelper
                 keyState[Native.VK_RMENU] = 0x80;
             }
             IntPtr layout = Native.GetKeyboardLayout(foregroundThread);
-            spelling.UpdateLayout(layout);
+            if (layout != lastLayout)
+            {
+                lastLayout = layout;
+                layoutRows = Native.LetterRows(layout);
+            }
+            spelling.UpdateLayout(layoutRows);
             // Only English keyboards: other languages must not go through an English dictionary.
             if (((int)(layout.ToInt64() & 0x3FF)) != Native.LANG_ENGLISH)
             {

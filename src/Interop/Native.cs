@@ -229,6 +229,40 @@ namespace KeyboardWriterHelper
             finally { CloseClipboard(); }
         }
 
+        const uint MAPVK_VSC_TO_VK = 1;
+
+        [DllImport("user32.dll")]
+        static extern uint MapVirtualKeyEx(uint code, uint mapType, IntPtr layout);
+
+        // The scan codes of the three letter rows, from the keys of Q, A and Z
+        // to the end of each row.
+        static readonly int[][] LetterRowScans = { new int[] { 0x10, 0x1B }, new int[] { 0x1E, 0x28 }, new int[] { 0x2C, 0x35 } };
+
+        // The letters a keyboard layout puts on the three letter rows, as the keys
+        // physically lie; a space for a key without a plain letter. US QWERTY gives
+        // "qwertyuiop  ", "asdfghjkl  ", "zxcvbnm   ".
+        public static string[] LetterRows(IntPtr layout)
+        {
+            string[] rows = new string[LetterRowScans.Length];
+            byte[] noKeysDown = new byte[256];
+            StringBuilder text = new StringBuilder(8);
+            for (int r = 0; r < rows.Length; r++)
+            {
+                StringBuilder row = new StringBuilder();
+                for (int scan = LetterRowScans[r][0]; scan <= LetterRowScans[r][1]; scan++)
+                {
+                    uint vk = MapVirtualKeyEx((uint)scan, MAPVK_VSC_TO_VK, layout);
+                    text.Length = 0;
+                    // Flag 4: without disturbing the keyboard's dead-key state.
+                    int n = vk == 0 ? 0 : ToUnicodeEx(vk, (uint)scan, noKeysDown, text, text.Capacity, 4, layout);
+                    char c = n == 1 ? char.ToLowerInvariant(text[0]) : ' ';
+                    row.Append(c >= 'a' && c <= 'z' ? c : ' ');
+                }
+                rows[r] = row.ToString();
+            }
+            return rows;
+        }
+
         public static bool IsForegroundFullScreen(IntPtr fg)
         {
             if (fg == IntPtr.Zero || fg == GetDesktopWindow() || fg == GetShellWindow()) return false;

@@ -76,25 +76,36 @@ namespace KeyboardWriterHelper
 
         public enum KeyboardLayoutKind { Auto, Qwerty, Qwertz, Azerty, Dvorak, Colemak }
 
+        // The letter rows as the physical keys lie, from the keys of Q, A and Z
+        // on; a space is a key without a letter (Dvorak's top row starts with ' , .).
         static readonly bool[,] NearQwerty = BuildNearTable(new string[] { "qwertyuiop", "asdfghjkl", "zxcvbnm" });
         static readonly bool[,] NearQwertz = BuildNearTable(new string[] { "qwertzuiop", "asdfghjkl", "yxcvbnm" });
         static readonly bool[,] NearAzerty = BuildNearTable(new string[] { "azertyuiop", "qsdfghjklm", "wxcvbn" });
-        static readonly bool[,] NearDvorak = BuildNearTable(new string[] { "pyfgcrl", "aoeuidhtns", "qjkxbmwvz" });
+        static readonly bool[,] NearDvorak = BuildNearTable(new string[] { "   pyfgcrl", "aoeuidhtns", " qjkxbmwvz" });
         static readonly bool[,] NearColemak = BuildNearTable(new string[] { "qwfpgjluy", "arstdhneio", "zxcvbkm" });
 
-        bool[,] currentNear = NearQwerty;
+        // Read by the spelling thread; set by it (SetLayout) and by the keyboard
+        // thread (UpdateActiveLayout), under layoutGate.
+        volatile bool[,] currentNear = NearQwerty;
+        readonly object layoutGate = new object();
+        // The rows the Auto table was built from, to build it only when they change.
+        string[] autoRows;
         public KeyboardLayoutKind Layout = KeyboardLayoutKind.Auto;
 
         public void SetLayout(KeyboardLayoutKind kind)
         {
-            Layout = kind;
-            switch (kind)
+            lock (layoutGate)
             {
-                case KeyboardLayoutKind.Qwertz: currentNear = NearQwertz; break;
-                case KeyboardLayoutKind.Azerty: currentNear = NearAzerty; break;
-                case KeyboardLayoutKind.Dvorak: currentNear = NearDvorak; break;
-                case KeyboardLayoutKind.Colemak: currentNear = NearColemak; break;
-                default: currentNear = NearQwerty; break;
+                Layout = kind;
+                autoRows = null;
+                switch (kind)
+                {
+                    case KeyboardLayoutKind.Qwertz: currentNear = NearQwertz; break;
+                    case KeyboardLayoutKind.Azerty: currentNear = NearAzerty; break;
+                    case KeyboardLayoutKind.Dvorak: currentNear = NearDvorak; break;
+                    case KeyboardLayoutKind.Colemak: currentNear = NearColemak; break;
+                    default: currentNear = NearQwerty; break;
+                }
             }
         }
 
@@ -108,29 +119,22 @@ namespace KeyboardWriterHelper
             return KeyboardLayoutKind.Qwerty;
         }
 
-        public static KeyboardLayoutKind DetectLayout(IntPtr layoutHandle)
+        // Auto: which keys are neighbours comes from the keyboard layout in use,
+        // read off its keys (Native.LetterRows), so any layout works: QWERTZ,
+        // AZERTY, Dvorak, Colemak and the rest. Called on the keyboard thread with
+        // the same array until the layout changes.
+        public void UpdateActiveLayout(string[] rows)
         {
-            long id = layoutHandle.ToInt64() & 0xFFFF;
-            long dev = (layoutHandle.ToInt64() >> 16) & 0xFFFF;
-            if (dev == 0x0001 || dev == 0x0003 || dev == 0x0004) return KeyboardLayoutKind.Dvorak;
-            if (id == 0x0407 || id == 0x0807 || id == 0x041B || id == 0x0405) return KeyboardLayoutKind.Qwertz;
-            if (id == 0x040C || id == 0x080C) return KeyboardLayoutKind.Azerty;
-            return KeyboardLayoutKind.Qwerty;
-        }
-
-        public void UpdateActiveLayout(IntPtr layoutHandle)
-        {
-            if (Layout == KeyboardLayoutKind.Auto && layoutHandle != IntPtr.Zero)
+            lock (layoutGate)
             {
-                KeyboardLayoutKind detected = DetectLayout(layoutHandle);
-                switch (detected)
-                {
-                    case KeyboardLayoutKind.Qwertz: currentNear = NearQwertz; break;
-                    case KeyboardLayoutKind.Azerty: currentNear = NearAzerty; break;
-                    case KeyboardLayoutKind.Dvorak: currentNear = NearDvorak; break;
-                    case KeyboardLayoutKind.Colemak: currentNear = NearColemak; break;
-                    default: currentNear = NearQwerty; break;
-                }
+                if (Layout != KeyboardLayoutKind.Auto || rows == null || ReferenceEquals(rows, autoRows)) return;
+                autoRows = rows;
+                int letters = 0;
+                foreach (string row in rows)
+                    foreach (char c in row)
+                        if (c != ' ') letters++;
+                // Not a Latin layout (or not readable): keep to QWERTY.
+                currentNear = letters >= 20 ? BuildNearTable(rows) : NearQwerty;
             }
         }
 
@@ -909,8 +913,10 @@ namespace KeyboardWriterHelper
             return near;
         }
 
+        // Keys without a letter (' ') have no neighbours.
         static void Pair(bool[,] near, char x, char y)
         {
+            if (x < 'a' || x > 'z' || y < 'a' || y > 'z') return;
             near[x - 'a', y - 'a'] = true;
             near[y - 'a', x - 'a'] = true;
         }

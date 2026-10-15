@@ -45,6 +45,13 @@ namespace KeyboardWriterHelper
             if (args.Length >= 2 && args[0] == "--eval-ok") return EvalOk(args);
             if (args.Length >= 2 && args[0] == "--selftest") return SelfTest(args);
             if (args.Length == 1 && args[0] == "--lint") return Lint();
+            if (args.Length == 1 && args[0] == "--layout")
+            {
+                // The letters of the keyboard layout in use, as key proximity sees them.
+                TextWriter o = Out();
+                foreach (string row in Native.LetterRows(Native.GetKeyboardLayout(0))) o.WriteLine("[" + row + "]");
+                return 0;
+            }
 
             bool first;
             using (Mutex single = new Mutex(true, "KeyboardWriterHelper.SingleInstance", out first))

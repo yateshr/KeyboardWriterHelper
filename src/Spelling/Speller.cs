@@ -294,10 +294,11 @@ namespace KeyboardWriterHelper
             return s != null && s.Ranker != null ? s.Ranker.PredictNext(secondPrevious, previous, prefix) : null;
         }
 
-        public void UpdateLayout(IntPtr layoutHandle)
+        // rows: the letters of the keyboard layout in use (Native.LetterRows).
+        public void UpdateLayout(string[] rows)
         {
-            if (speller != null && speller.Ranker != null)
-                speller.Ranker.UpdateActiveLayout(layoutHandle);
+            Speller s = speller;
+            if (s != null && s.Ranker != null) s.Ranker.UpdateActiveLayout(rows);
         }
 
         // Lets the worker finish the lookup in hand; it then releases the dictionaries.
