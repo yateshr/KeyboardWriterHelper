@@ -3,6 +3,10 @@
 > **Executive Overview**  
 > Following an exhaustive, line-by-line audit of the entire codebase (comprising 3 deep-audit review tracks across Engine, Hook, Interop, Spelling, Ranking, Configuration, UI, Lifecycle, Build, and Test coverage), this document catalogs all identified flaws, blind spots, and architectural risks, categorized by severity with actionable remediation designs.
 
+> **Update after the review of 1.2:** some items below marked RESOLVED were not (HIGH-02,
+> parts of LOW-03), and the 1.2 features added new problems. See
+> [section 6](#6-review-of-12-what-was-found-and-fixed) for what was found, what is fixed and what is still open.
+
 ---
 
 ## Issue Summary Matrix
@@ -280,10 +284,57 @@ flowchart TD
 
 ---
 
+## 6. Review of 1.2: what was found and fixed
+
+Found by building 1.2, running its tests and typing correct sentences through the engine.
+
+### Fixed
+
+| ID | Problem | Fix |
+| :--- | :--- | :--- |
+| REV-01 | Grammar rules changed correct English: `Does it have` → `Does it has`, `If he were` → `If he was`, `The can fell` → `The can fall`, `His will made` → `His will make`, `Plan A in` → `Plan An in`, `a unanimous` → `an unanimous`, `I will saw` → `I will see` | Subject-verb fixes need a clause start before the pronoun; modal rules skip nouns ("the can") and the name "Will"; ambiguous past forms removed; a/an only when the sound is certain |
+| REV-02 | Phrase fixes changed correct English: `Is there going` → `Is they're going`, `later then`, `its true colors`, `your doing`, `I suppose to some extent`, `shoe in`, `card shark`, `hone in on`; 12 duplicate entries | Removed or narrowed, guard phrases added, `--lint` catches duplicates |
+| REV-03 | Built-in fixes `judgement=judgment` (British spelling) and `allot=a lot` (a real word) | Removed; `judgement`/`ageing` accepted as variants |
+| REV-04 | Unknown lower-case names replaced by rarer names (`yatesh` → `Yates`) | Only well-known names may replace an unknown word |
+| REV-05 | Smart Compose (on by default) swallowed Tab: `Name` + Tab typed `Names `; `cons` + Tab typed `consider ` in code editors | Guesses only from the words before, a minimum share for next-word guesses, Tab only while the pill shows the guess, off by default |
+| REV-06 | `--eval` and `--eval-ok` always exited with 0, so CI passed whatever the accuracy; the end-to-end test passed silently when it could not run | `--min-right`, `--max-wrong`, `--max-changed` limits; SKIPPED reported; `tests/must-not-change.txt` |
+| REV-07 | HIGH-02 was not resolved: layout detection read the language half of the layout handle, so QWERTZ/AZERTY never matched while correcting, and the Dvorak check could not match | The neighbour table is read off the active layout's keys (`--layout` shows it) |
+| REV-08 | The fullscreen check ran several Win32 calls on every key; the mouse hook shared the keyboard thread, so the pointer froze while a key waited for a lookup | Fullscreen checked on window change and once a second; mouse hook on its own thread |
+| REV-09 | Password boxes were corrected and completed | Win32/WinForms password edit controls are skipped |
+| REV-10 | Lost updates and overwritten Notepad edits in the user's lists; the safe write deleted the file before replacing it; "access denied" escaped | Pending edits kept and merged; no delete-then-move; all file errors handled |
+| REV-11 | `{clip}` typed line breaks key by key; dates depended on the Windows region (`14.05`); snippets untested | One line, invariant culture, injectable clock and clipboard, typing cases |
+| REV-12 | Spelling cache emptied itself at 5,000 entries; events disposed while another thread could set them; COM objects released while a lookup could run | Two-generation cache; worker owns and releases the dictionaries |
+| REV-13 | Half of every source line was blank; six copied typography blocks, four copied prediction blocks, three unused constructors | Reformatted, `.editorconfig`, table-driven code |
+| REV-14 | .NET 9 support ends on 10 Nov 2026; the exe carried both the text lists and the binary model (12.5 MB) | .NET 10 (LTS); only the model is built in (6.2 MB) |
+| REV-15 | Settings window cut off at 125%+ display scaling; stats written every second while typing; startup balloon at every sign-in; UI exceptions showed a crash dialog | DPI auto-scaling, 30 s stats, first-run balloon, errors shown in the tray menu |
+
+### Still open
+
+- **UIPI**: a window of a program running as administrator is only skipped after the first
+  refused fix. Checking the target's elevation before typing would avoid that first attempt.
+- **Password boxes in browsers and WPF**: they do not report themselves as Win32 edit controls;
+  UI Automation's `IsPassword` would cover them but costs time on the keyboard thread.
+- **Caret position**: `GetGUIThreadInfo` finds no caret in browsers and Electron apps, so the pill
+  falls back to the window corner. UI Automation `TextPattern2.GetCaretRange` or MSAA
+  `OBJID_CARET` would place it in more apps.
+- **Trigram data**: most entries in `english-trigrams.txt` are combined from pairs by
+  `tools/expand_corpus.py` (with made-up counts for the added words), and any match adds a flat
+  bonus. Real three-word counts, weighted by their frequency, would make context more reliable.
+- **Distribution**: the exe is not code-signed; an unsigned program with a keyboard hook is often
+  flagged by antivirus and SmartScreen. Signing (SignPath, free for open source, or Azure Trusted
+  Signing) and a winget manifest would help.
+- **License**: the repository has no LICENSE file, and the word data is derived from CC-BY-SA-4.0
+  material, which asks for attribution and the same license for derived data.
+- **"tha" and "thi"**: Hinglish words in `tests/correct-words.txt` that are still corrected to
+  "the" when typed alone; `data/other-language.txt` leaves them out on purpose. Decide which way
+  is right and change the list or the test.
+
+---
+
 ## Conclusion & Verification Strategy
-Once these remediation steps are enacted, the verification pipeline should ensure:
-1. `dotnet build` compiles cleanly with 0 warnings on .NET 9.
-2. `build.cmd` compiles cleanly via .NET Framework 4.0 `csc.exe`.
-3. `test.cmd` runs without exit code masking and passes 100% of cases.
-4. Typo correction accuracy is verified to remain above 95% on `tests/typos.txt` with 0% false positives on `tests/correct-words.txt`.
+The verification pipeline ensures:
+1. `dotnet build` compiles cleanly with 0 warnings on .NET 10.
+2. `build.cmd` compiles cleanly with the Windows `csc.exe`.
+3. `test.cmd` runs without exit code masking and passes 100% of cases, including `tests/must-not-change.txt`.
+4. Typo correction accuracy stays at or above 95% on `tests/typos.txt` and `tests/reviewer-typos.txt`, with at most 0.5% of `tests/correct-words.txt` changed (the run fails otherwise).
 5. Smart Compose and sentence-aware grammar test cases pass 100%.
