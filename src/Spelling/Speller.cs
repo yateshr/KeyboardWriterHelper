@@ -165,6 +165,26 @@ namespace KeyboardWriterHelper
 
         }
 
+
+
+        public string PredictNext(string previous, string prefix)
+
+        {
+
+            return Ranker.PredictNext(previous, prefix);
+
+        }
+
+
+
+        public string PredictNext(string secondPrevious, string previous, string prefix)
+
+        {
+
+            return Ranker.PredictNext(secondPrevious, previous, prefix);
+
+        }
+
     }
 
     
@@ -474,6 +494,18 @@ namespace KeyboardWriterHelper
             Speller s = speller;
 
             return s != null && s.Ranker != null ? s.Ranker.PredictNext(previous, prefix) : null;
+
+        }
+
+
+
+        public string PredictNext(string secondPrevious, string previous, string prefix)
+
+        {
+
+            Speller s = speller;
+
+            return s != null && s.Ranker != null ? s.Ranker.PredictNext(secondPrevious, previous, prefix) : null;
 
         }
 

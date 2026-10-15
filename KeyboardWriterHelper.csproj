@@ -19,6 +19,12 @@
     <EmbeddedResource Include="english-pairs.txt">
       <LogicalName>english-pairs.txt</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="english-trigrams.txt" Condition="Exists('english-trigrams.txt')">
+      <LogicalName>english-trigrams.txt</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="english-model.bin" Condition="Exists('english-model.bin')">
+      <LogicalName>english-model.bin</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="data\*.txt">
       <LogicalName>%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>

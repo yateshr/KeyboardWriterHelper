@@ -31,7 +31,7 @@ namespace KeyboardWriterHelper
 
     {
 
-        public static StreamReader Open(string name)
+        public static Stream OpenStream(string name)
 
         {
 
@@ -58,6 +58,32 @@ namespace KeyboardWriterHelper
                 }
 
             }
+
+            if (stream == null && File.Exists(name))
+            {
+                try { stream = File.OpenRead(name); } catch { }
+            }
+
+            return stream;
+
+        }
+
+        public static bool HasResource(string name)
+        {
+            Stream s = OpenStream(name);
+            if (s != null)
+            {
+                s.Dispose();
+                return true;
+            }
+            return false;
+        }
+
+        public static StreamReader Open(string name)
+
+        {
+
+            Stream stream = OpenStream(name);
 
             if (stream == null) throw new InvalidOperationException("\"" + name + "\" is missing from this build.");
 

@@ -225,5 +225,14 @@
 "wether forecast today " => "weather forecast today "
 "bare with me please " => "bear with me please "
 "take for granite that " => "take for granted that "
+# ---- trigram predictive next-word suggestions (Tab) ----
+"as well {TAB}" => "as well as "
+"look forward {TAB}" => "look forward to "
+"in order {TAB}" => "in order to "
+"let me {TAB}" => "let me know "
+"thank you s{TAB}" => "thank you so "
+"thank you v{TAB}" => "thank you very "
+"thank you f{TAB}" => "thank you for "
+"git c{TAB}" => "git commit "
+"docker r{TAB}" => "docker run "
 @ reset
-

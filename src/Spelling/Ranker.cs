@@ -79,7 +79,8 @@ namespace KeyboardWriterHelper
 
     
 
-        const string FrequencyResource = "english-frequency.txt", PairResource = "english-pairs.txt";
+        const string FrequencyResource = "english-frequency.txt", PairResource = "english-pairs.txt",
+                     TrigramResource = "english-trigrams.txt", ModelResource = "english-model.bin";
 
         const int MaxValidations = 8;
 
@@ -261,33 +262,227 @@ namespace KeyboardWriterHelper
 
         readonly Dictionary<string, int> numberByWord = new Dictionary<string, int>(StringComparer.Ordinal);
 
-        readonly string[] wordByNumber;
+        string[] wordByNumber;
 
-        readonly int[][] topFollowers;
+        int[][] topFollowers;
 
-        readonly long[][] topFollowerCounts;
+        long[][] topFollowerCounts;
 
-        readonly Dictionary<long, float> pairLogs = new Dictionary<long, float>();
+        Dictionary<long, float> pairLogs = new Dictionary<long, float>();
 
-        readonly double[] asFirst, asSecond;
+        Dictionary<long, float> trigramLogs = new Dictionary<long, float>();
 
-        readonly double pairTotal;
+        Dictionary<long, int[]> topTrigramFollowers = new Dictionary<long, int[]>();
+
+        Dictionary<long, float[]> topTrigramCounts = new Dictionary<long, float[]>();
+
+        double[] asFirst, asSecond;
+
+        double pairTotal;
 
         readonly double[,] grid = new double[MaxLength + 1, MaxLength + 1];
 
     
 
-        // Word list: "word count" per line, produced by build_frequency.py from two
-
-        // public lists (OpenSubtitles 2018 counts, github.com/hermitdave/FrequencyWords,
-
-        // CC-BY-SA-4.0; Google Web 1T counts, norvig.com/ngrams).
-
-        // Pair list: "first second count" per line, produced by build_pairs.py
-
-        // from the Google Web 1T two-word counts (norvig.com/ngrams).
-
         public Ranker()
+
+        {
+
+            if (!TryLoadBinaryModel())
+
+            {
+
+                LoadTextCorpus();
+
+            }
+
+        }
+
+
+
+        bool TryLoadBinaryModel()
+
+        {
+
+            if (!Data.HasResource(ModelResource)) return false;
+
+            try
+
+            {
+
+                using (Stream stream = Data.OpenStream(ModelResource))
+
+                {
+
+                    if (stream == null) return false;
+
+                    using (BinaryReader br = new BinaryReader(stream, Encoding.UTF8))
+
+                    {
+
+                        uint magic = br.ReadUInt32();
+
+                        if (magic != 0x4D48574B) return false; // 'KWHM'
+
+                        uint version = br.ReadUInt32();
+
+                        if (version != 1) return false;
+
+
+
+                        uint wordCount = br.ReadUInt32();
+
+                        wordByNumber = new string[wordCount];
+
+                        topFollowers = new int[wordCount][];
+
+                        topFollowerCounts = new long[wordCount][];
+
+                        asFirst = new double[wordCount];
+
+                        asSecond = new double[wordCount];
+
+
+
+                        for (uint i = 0; i < wordCount; i++)
+
+                        {
+
+                            ushort len = br.ReadUInt16();
+
+                            byte[] bytes = br.ReadBytes(len);
+
+                            string word = Encoding.UTF8.GetString(bytes);
+
+                            float log = br.ReadSingle();
+
+
+
+                            int id = (int)i;
+
+                            wordByNumber[id] = word;
+
+                            logByWord[word] = log;
+
+                            numberByWord[word] = id;
+
+                            if (word.Length >= 3 && IsPlain(word))
+
+                            {
+
+                                words.Add(word);
+
+                                logs.Add(log);
+
+                            }
+
+                        }
+
+
+
+                        uint pairCount = br.ReadUInt32();
+
+                        for (uint i = 0; i < pairCount; i++)
+
+                        {
+
+                            int id1 = (int)br.ReadUInt32();
+
+                            int id2 = (int)br.ReadUInt32();
+
+                            float logVal = br.ReadSingle();
+
+                            long count = br.ReadInt64();
+
+
+
+                            pairLogs[PairKey(id1, id2)] = logVal;
+
+                            asFirst[id1] += count;
+
+                            asSecond[id2] += count;
+
+                            pairTotal += count;
+
+                            RecordTopFollower(id1, id2, count);
+
+                        }
+
+
+
+                        uint trigramCount = br.ReadUInt32();
+
+                        for (uint i = 0; i < trigramCount; i++)
+
+                        {
+
+                            int id1 = (int)br.ReadUInt32();
+
+                            int id2 = (int)br.ReadUInt32();
+
+                            int id3 = (int)br.ReadUInt32();
+
+                            float logVal = br.ReadSingle();
+
+
+
+                            trigramLogs[TrigramKey(id1, id2, id3)] = logVal;
+
+                            RecordTopTrigramFollower(id1, id2, id3, logVal);
+
+                        }
+
+
+
+                        return true;
+
+                    }
+
+                }
+
+            }
+
+            catch
+
+            {
+
+                logByWord.Clear();
+
+                words.Clear();
+
+                logs.Clear();
+
+                numberByWord.Clear();
+
+                pairLogs.Clear();
+
+                trigramLogs.Clear();
+
+                topTrigramFollowers.Clear();
+
+                topTrigramCounts.Clear();
+
+                wordByNumber = null;
+
+                topFollowers = null;
+
+                topFollowerCounts = null;
+
+                asFirst = null;
+
+                asSecond = null;
+
+                pairTotal = 0;
+
+                return false;
+
+            }
+
+        }
+
+
+
+        void LoadTextCorpus()
 
         {
 
@@ -333,7 +528,7 @@ namespace KeyboardWriterHelper
 
             }
 
-    
+
 
             int totalWords = numberByWord.Count;
 
@@ -363,8 +558,6 @@ namespace KeyboardWriterHelper
 
                 {
 
-                    // A quarter of a million lines: no Split, no TryParse.
-
                     int space = line.IndexOf(' '), space2 = line.IndexOf(' ', space + 1);
 
                     if (space <= 0 || space2 < 0) continue;
@@ -390,6 +583,170 @@ namespace KeyboardWriterHelper
                     RecordTopFollower(first, second, count);
 
                 }
+
+            }
+
+
+
+            if (Data.HasResource(TrigramResource))
+
+            {
+
+                using (StreamReader reader = Data.Open(TrigramResource))
+
+                {
+
+                    string line;
+
+                    while ((line = reader.ReadLine()) != null)
+
+                    {
+
+                        int s1 = line.IndexOf(' ');
+
+                        if (s1 <= 0) continue;
+
+                        int s2 = line.IndexOf(' ', s1 + 1);
+
+                        if (s2 <= 0) continue;
+
+                        int s3 = line.IndexOf(' ', s2 + 1);
+
+                        if (s3 <= 0) continue;
+
+
+
+                        string w1 = line.Substring(0, s1);
+
+                        string w2 = line.Substring(s1 + 1, s2 - s1 - 1);
+
+                        string w3 = line.Substring(s2 + 1, s3 - s2 - 1);
+
+                        long count = 0;
+
+                        for (int i = s3 + 1; i < line.Length; i++) count = count * 10 + (line[i] - '0');
+
+
+
+                        int id1, id2, id3;
+
+                        if (count <= 0 || !numberByWord.TryGetValue(w1, out id1) ||
+
+                            !numberByWord.TryGetValue(w2, out id2) ||
+
+                            !numberByWord.TryGetValue(w3, out id3)) continue;
+
+
+
+                        float logVal = (float)Math.Log10(count);
+
+                        trigramLogs[TrigramKey(id1, id2, id3)] = logVal;
+
+                        RecordTopTrigramFollower(id1, id2, id3, logVal);
+
+                    }
+
+                }
+
+            }
+
+        }
+
+
+
+        void RecordTopTrigramFollower(int first, int second, int third, float count)
+
+        {
+
+            long key = TrigramPrefixKey(first, second);
+
+            int[] f;
+
+            float[] c;
+
+            if (!topTrigramFollowers.TryGetValue(key, out f))
+
+            {
+
+                topTrigramFollowers[key] = new int[] { third };
+
+                topTrigramCounts[key] = new float[] { count };
+
+                return;
+
+            }
+
+            c = topTrigramCounts[key];
+
+            int len = f.Length;
+
+            const int maxFollowers = 8;
+
+            if (len < maxFollowers)
+
+            {
+
+                int[] newF = new int[len + 1];
+
+                float[] newC = new float[len + 1];
+
+                int pos = 0;
+
+                while (pos < len && c[pos] >= count)
+
+                {
+
+                    newF[pos] = f[pos];
+
+                    newC[pos] = c[pos];
+
+                    pos++;
+
+                }
+
+                newF[pos] = third;
+
+                newC[pos] = count;
+
+                while (pos < len)
+
+                {
+
+                    newF[pos + 1] = f[pos];
+
+                    newC[pos + 1] = c[pos];
+
+                    pos++;
+
+                }
+
+                topTrigramFollowers[key] = newF;
+
+                topTrigramCounts[key] = newC;
+
+            }
+
+            else if (count > c[maxFollowers - 1])
+
+            {
+
+                int pos = maxFollowers - 1;
+
+                while (pos > 0 && c[pos - 1] < count)
+
+                {
+
+                    f[pos] = f[pos - 1];
+
+                    c[pos] = c[pos - 1];
+
+                    pos--;
+
+                }
+
+                f[pos] = third;
+
+                c[pos] = count;
 
             }
 
@@ -523,7 +880,67 @@ namespace KeyboardWriterHelper
 
         {
 
+            return PredictNext(null, previous, prefix);
+
+        }
+
+
+
+        public string PredictNext(string secondPrevious, string previous, string prefix)
+
+        {
+
             string pfx = prefix == null ? "" : prefix.ToLowerInvariant();
+
+
+
+            // 1. Check trigram next-word match if both secondPrevious and previous are present
+
+            if (!string.IsNullOrEmpty(secondPrevious) && !string.IsNullOrEmpty(previous))
+
+            {
+
+                int first, second;
+
+                if (numberByWord.TryGetValue(secondPrevious.ToLowerInvariant(), out first) &&
+
+                    numberByWord.TryGetValue(previous.ToLowerInvariant(), out second))
+
+                {
+
+                    long triKey = TrigramPrefixKey(first, second);
+
+                    int[] followers;
+
+                    if (topTrigramFollowers.TryGetValue(triKey, out followers) && followers != null)
+
+                    {
+
+                        for (int i = 0; i < followers.Length; i++)
+
+                        {
+
+                            string candidate = wordByNumber[followers[i]];
+
+                            if (string.IsNullOrEmpty(pfx)) return candidate;
+
+                            if (candidate.StartsWith(pfx, StringComparison.OrdinalIgnoreCase) &&
+
+                                candidate.Length > pfx.Length)
+
+                                return candidate;
+
+                        }
+
+                    }
+
+                }
+
+            }
+
+
+
+            // 2. Check bigram follower match if previous is present
 
             if (!string.IsNullOrEmpty(previous))
 
@@ -563,6 +980,10 @@ namespace KeyboardWriterHelper
 
             }
 
+
+
+            // 3. Fallback to common vocabulary prefix match
+
             if (pfx.Length >= 2)
 
             {
@@ -581,11 +1002,13 @@ namespace KeyboardWriterHelper
 
             }
 
+
+
             return null;
 
         }
 
-    
+
 
         // Multiplied, not shifted: a long's hash is its two halves xor-ed, which
 
@@ -593,7 +1016,27 @@ namespace KeyboardWriterHelper
 
         static long PairKey(int first, int second) { return first * 1000003L + second; }
 
-    
+
+
+        static long TrigramKey(int first, int second, int third)
+
+        {
+
+            return (((long)(uint)first) << 34) | (((long)(uint)second) << 17) | (long)(uint)third;
+
+        }
+
+
+
+        static long TrigramPrefixKey(int first, int second)
+
+        {
+
+            return (((long)(uint)first) << 17) | (long)(uint)second;
+
+        }
+
+
 
         // By how many factors of ten the words before make a candidate likelier
 
@@ -609,6 +1052,16 @@ namespace KeyboardWriterHelper
 
             double score = 0;
 
+            if (secondPrevious != null && previous != null)
+
+            {
+
+                double tri = ContextTrigram(secondPrevious, previous, candidate);
+
+                if (tri > 0) score += tri;
+
+            }
+
             if (previous != null) score += ContextPair(previous, candidate);
 
             if (secondPrevious != null) score += 0.4 * ContextPair(secondPrevious, candidate);
@@ -617,7 +1070,7 @@ namespace KeyboardWriterHelper
 
         }
 
-    
+
 
         double Context(string previous, string candidate)
 
@@ -627,7 +1080,39 @@ namespace KeyboardWriterHelper
 
         }
 
-    
+
+
+        double ContextTrigram(string w1Str, string w2Str, string w3Str)
+
+        {
+
+            if (w1Str == null || w2Str == null || w3Str == null) return 0;
+
+            int space = w3Str.IndexOf(' ');
+
+            string w3Word = space > 0 ? w3Str.Substring(0, space) : w3Str;
+
+
+
+            int first, second, third;
+
+            if (!numberByWord.TryGetValue(w1Str.ToLowerInvariant(), out first) ||
+
+                !numberByWord.TryGetValue(w2Str.ToLowerInvariant(), out second) ||
+
+                !numberByWord.TryGetValue(w3Word.ToLowerInvariant(), out third)) return 0;
+
+
+
+            float triLog;
+
+            if (!trigramLogs.TryGetValue(TrigramKey(first, second, third), out triLog)) return 0;
+
+            return 1.2;
+
+        }
+
+
 
         double ContextPair(string prev, string candidate)
 

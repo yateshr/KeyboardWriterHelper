@@ -178,7 +178,7 @@ namespace KeyboardWriterHelper
 
             this.testMarker = testMarker;
 
-            engine = new Engine(Lookup, myWords.Contains, myFixes.Get, Type, spelling.PredictNext);
+            engine = new Engine(Lookup, myWords.Contains, myFixes.Get, Type, (Func<string, string, string, string>)spelling.PredictNext);
 
             engine.Corrected += OnCorrected;
 
@@ -242,7 +242,7 @@ namespace KeyboardWriterHelper
 
         {
 
-            Engine rehearsal = new Engine(Lookup, myWords.Contains, myFixes.Get, delegate { }, spelling.PredictNext);
+            Engine rehearsal = new Engine(Lookup, myWords.Contains, myFixes.Get, delegate { }, (Func<string, string, string, string>)spelling.PredictNext);
 
             foreach (char c in "Teh wrold ") rehearsal.Char(c);
 

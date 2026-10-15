@@ -37,6 +37,8 @@ set GEN=%TEMP%\KeyboardWriterHelper.Version.cs
 >>"%GEN%" echo [assembly: System.Reflection.AssemblyInformationalVersion("%SHOWN%")]
 
 set RES=/resource:english-frequency.txt,english-frequency.txt /resource:english-pairs.txt,english-pairs.txt
+if exist english-trigrams.txt set RES=%RES% /resource:english-trigrams.txt,english-trigrams.txt
+if exist english-model.bin set RES=%RES% /resource:english-model.bin,english-model.bin
 for %%f in (data\*.txt) do call set RES=%%RES%% /resource:%%f,%%~nxf
 
 set OUT=%KWH_OUT%

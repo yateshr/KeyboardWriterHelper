@@ -179,7 +179,7 @@ namespace KeyboardWriterHelper
 
                     },
 
-                    speller.Ranker.PredictNext);
+                    (Func<string, string, string, string>)speller.Ranker.PredictNext);
 
             }
 

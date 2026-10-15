@@ -81,6 +81,8 @@ namespace KeyboardWriterHelper
 
         readonly Func<string, string, string> predict; // (previous, prefix) -> predictedWord
 
+        readonly Func<string, string, string, string> predictWithContext; // (secondPrevious, previous, prefix) -> predictedWord
+
         readonly Func<string, bool> isIgnored;
 
         // The user's own fix for a word or a two-word phrase, or null.
@@ -281,6 +283,46 @@ namespace KeyboardWriterHelper
 
 
 
+        public Engine(Func<string, string, string, bool, Suggestion> suggestWithContext, Func<string, bool> isIgnored,
+
+            Func<string, string> ownFix, Action<int, string> emit, Func<string, string, string, string> predictWithContext)
+
+        {
+
+            this.suggestWithContext = suggestWithContext;
+
+            this.suggest = delegate(string w, string p, bool c) { return suggestWithContext(w, null, p, c); };
+
+            this.isIgnored = isIgnored;
+
+            this.ownFix = ownFix;
+
+            this.emit = emit;
+
+            this.predictWithContext = predictWithContext;
+
+        }
+
+
+
+        string Predict(string secondPrev, string prev, string pfx)
+
+        {
+
+            if (predictWithContext != null)
+
+                return predictWithContext(secondPrev, prev, pfx);
+
+            if (predict != null)
+
+                return predict(prev, pfx);
+
+            return null;
+
+        }
+
+
+
         public bool AcceptPrediction()
 
         {
@@ -445,10 +487,10 @@ namespace KeyboardWriterHelper
 
                 if (word.Length > MaxWordLength) { Clear(); tainted = true; DismissPrediction(); return false; }
 
-                if (SmartCompose && predict != null && !tainted && word.Length >= 1)
+                if (SmartCompose && (predictWithContext != null || predict != null) && !tainted && word.Length >= 1)
                 {
                     string pfx = word.ToString();
-                    string pred = predict(previous == null ? null : previous.ToLowerInvariant(), pfx.ToLowerInvariant());
+                    string pred = Predict(secondPrevious == null ? null : secondPrevious.ToLowerInvariant(), previous == null ? null : previous.ToLowerInvariant(), pfx.ToLowerInvariant());
                     if (!string.IsNullOrEmpty(pred) && !pred.Equals(pfx, StringComparison.OrdinalIgnoreCase))
                     {
                         if (char.IsUpper(pfx[0]) && char.IsLower(pred[0]))
@@ -669,9 +711,9 @@ namespace KeyboardWriterHelper
 
                               (ending[ending.Length - 1] != '.' || !IsAbbreviation(last));
 
-                if (SmartCompose && predict != null && plain && previous != null)
+                if (SmartCompose && (predictWithContext != null || predict != null) && plain && previous != null)
                 {
-                    string pred = predict(previous.ToLowerInvariant(), "");
+                    string pred = Predict(secondPrevious == null ? null : secondPrevious.ToLowerInvariant(), previous.ToLowerInvariant(), "");
                     if (!string.IsNullOrEmpty(pred))
                     {
                         if (capNext && char.IsLower(pred[0]))
@@ -816,10 +858,10 @@ namespace KeyboardWriterHelper
                 spaceAfterWord = false;
                 tainted = false;
 
-                if (SmartCompose && predict != null && word.Length >= 1)
+                if (SmartCompose && (predictWithContext != null || predict != null) && word.Length >= 1)
                 {
                     string pfx = word.ToString();
-                    string pred = predict(previous == null ? null : previous.ToLowerInvariant(), pfx.ToLowerInvariant());
+                    string pred = Predict(secondPrevious == null ? null : secondPrevious.ToLowerInvariant(), previous == null ? null : previous.ToLowerInvariant(), pfx.ToLowerInvariant());
                     if (!string.IsNullOrEmpty(pred) && !pred.Equals(pfx, StringComparison.OrdinalIgnoreCase))
                     {
                         if (char.IsUpper(pfx[0]) && char.IsLower(pred[0]))
@@ -901,10 +943,10 @@ namespace KeyboardWriterHelper
             else if (word.Length > 0)
             {
                 word.Length--;
-                if (SmartCompose && predict != null && !tainted && word.Length >= 1)
+                if (SmartCompose && (predictWithContext != null || predict != null) && !tainted && word.Length >= 1)
                 {
                     string pfx = word.ToString();
-                    string pred = predict(previous == null ? null : previous.ToLowerInvariant(), pfx.ToLowerInvariant());
+                    string pred = Predict(secondPrevious == null ? null : secondPrevious.ToLowerInvariant(), previous == null ? null : previous.ToLowerInvariant(), pfx.ToLowerInvariant());
                     if (!string.IsNullOrEmpty(pred) && !pred.Equals(pfx, StringComparison.OrdinalIgnoreCase))
                     {
                         if (char.IsUpper(pfx[0]) && char.IsLower(pred[0]))
