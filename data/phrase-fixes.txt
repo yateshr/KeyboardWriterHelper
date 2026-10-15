@@ -30,7 +30,6 @@ less then=less than
 rather then=rather than
 other then=other than
 sooner then=sooner than
-later then=later than
 and than=and then
 but than=but then
 since than=since then
@@ -64,7 +63,6 @@ there own=their own
 there going=they're going
 there coming=they're coming
 there doing=they're doing
-there not=they're not
 
 # it's / its
 its a=it's a
@@ -74,9 +72,6 @@ its been=it's been
 its the=it's the
 its ok=it's ok
 its okay=it's okay
-its fine=it's fine
-its true=it's true
-its clear=it's clear
 
 # you're / your
 your a=you're a
@@ -84,9 +79,7 @@ your an=you're an
 your not=you're not
 your the=you're the
 your are=you are
-your going=you're going
-your doing=you're doing
-your coming=you're coming
+your going to=you're going to
 your welcome to=you're welcome to
 
 # lose, typed as loose
@@ -99,7 +92,6 @@ would loose=would lose
 could loose=could lose
 might loose=might lose
 lose knot=loose knot
-lose tooth=loose tooth
 
 # here, typed as hear
 over hear=over here
@@ -251,7 +243,6 @@ could of known=could have known
 would of known=would have known
 should of known=should have known
 could care less=couldn't care less
-suppose to=supposed to
 use to be=used to be
 
 # Article agreements (a vs an)
@@ -316,18 +307,14 @@ wether forecast=weather forecast
 bare with me=bear with me
 bare in mind=bear in mind
 tow the line=toe the line
-chomping at the bit=champing at the bit
-spit and image=spitting image
 wet your appetite=whet your appetite
 peek your curiosity=pique your curiosity
 peak your curiosity=pique your curiosity
-shoe in=shoo-in
 take for granite=take for granted
 took for granite=took for granted
 taken for granite=taken for granted
 first come first serve=first-come first-served
 case and point=case in point
-card shark=card sharp
 beckon call=beck and call
 baited breath=bated breath
 by far and large=by and large
@@ -343,10 +330,6 @@ wreck your brain=rack your brain
 wreck havoc=wreak havoc
 wrecked havoc=wreaked havoc
 wrecking havoc=wreaking havoc
-hone in on=home in on
-honed in on=homed in on
-honing in on=homing in on
-hones in on=homes in on
 
 # Quantifiers and countable agreement
 much items=many items
@@ -365,8 +348,8 @@ much users=many users
 much cars=many cars
 much files=many files
 much errors=many errors
-these kind=this kind
-those kind=that kind
+these kind of=this kind of
+those kind of=that kind of
 every persons=every person
 each persons=each person
 each students=each student
@@ -375,18 +358,12 @@ each items=each item
 each books=each book
 
 # Expanded of / have after modals
-could of had=could have had
-would of had=would have had
-should of had=should have had
 could of made=could have made
 would of made=would have made
 should of made=should have made
 could of said=could have said
 would of said=would have said
 should of said=should have said
-could of seen=could have seen
-would of seen=would have seen
-should of seen=should have seen
 could of taken=could have taken
 would of taken=would have taken
 should of taken=should have taken
@@ -396,15 +373,28 @@ should of come=should have come
 could of given=could have given
 would of given=would have given
 should of given=should have given
-might of been=might have been
-must of been=must have been
 might of had=might have had
 must of had=must have had
 
 # High-frequency grammatical collocations
-piece of mind=peace of mind
 all intensive purposes=all intents and purposes
-for all intensive purposes=for all intents and purposes
-suppose to be=supposed to be
-free reign=free rein
-deep seeded=deep-seated
+
+# Guards: a phrase listed as its own fix keeps the shorter fixes away from it.
+is there going=is there going
+was there going=was there going
+are there going=are there going
+were there going=were there going
+isn't there going=isn't there going
+wasn't there going=wasn't there going
+aren't there going=aren't there going
+is there coming=is there coming
+didn't use to be=didn't use to be
+you use to be=you use to be
+
+# "suppose to" alone is often right ("I suppose to some extent").
+was suppose to=was supposed to
+is suppose to=is supposed to
+are suppose to=are supposed to
+were suppose to=were supposed to
+am suppose to=am supposed to
+not suppose to=not supposed to

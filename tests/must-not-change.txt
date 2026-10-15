@@ -1,0 +1,66 @@
+# Correct English that must come out exactly as typed (run with --cases).
+# Changing correct text is worse than missing a mistake: every grammar rule
+# and phrase fix should add the correct sentences it could break here.
+# Each line: "what is typed" => "what must be on screen"
+
+# Subject and verb: inverted questions, "let it have", subjunctive "were"
+"Does it have a battery? " => "Does it have a battery? "
+"Would he have known that? " => "Would he have known that? "
+"Does she have time today? " => "Does she have time today? "
+"Can it have two owners? " => "Can it have two owners? "
+"Let it have some room. " => "Let it have some room. "
+"If he were rich he would buy it. " => "If he were rich he would buy it. "
+"If she were here we could go. " => "If she were here we could go. "
+"I wish he were taller. " => "I wish he were taller. "
+"A thank you is enough. " => "A thank you is enough. "
+"Each of you is welcome. " => "Each of you is welcome. "
+"Which of you was there? " => "Which of you was there? "
+"Phase I is complete. " => "Phase I is complete. "
+
+# there / their / they're, than / then
+"Is there going to be a meeting? " => "Is there going to be a meeting? "
+"Was there going to be a party? " => "Was there going to be a party? "
+"Is there not a better way? " => "Is there not a better way? "
+"See you later then. " => "See you later then. "
+
+# Modals and "do" used as nouns or names, verbs that are also nouns
+"The can fell off the table. " => "The can fell off the table. "
+"His will made it clear. " => "His will made it clear. "
+"Will went home early. " => "Will went home early. "
+"I will saw the plank. " => "I will saw the plank. "
+"The watch has rose gold trim. " => "The watch has rose gold trim. "
+
+# a / an
+"Plan A in action. " => "Plan A in action. "
+"We need vitamin A or C. " => "We need vitamin A or C. "
+"Points a and b are close. " => "Points a and b are close. "
+"If a is zero we stop. " => "If a is zero we stop. "
+"It was a unanimous vote. " => "It was a unanimous vote. "
+"It was a unique idea. " => "It was a unique idea. "
+"It is a useful tool. " => "It is a useful tool. "
+"She is a European citizen. " => "She is a European citizen. "
+"It was a once in a lifetime trip. " => "It was a once in a lifetime trip. "
+"It was an honest mistake. " => "It was an honest mistake. "
+"He wants an herbal tea. " => "He wants an herbal tea. "
+"It was an uninformed guess. " => "It was an uninformed guess. "
+"It was an onerous task. " => "It was an onerous task. "
+
+# its / your, possessive before an adjective or a gerund
+"The company showed its true colors. " => "The company showed its true colors. "
+"The lake kept its clear water. " => "The lake kept its clear water. "
+"Read its fine print. " => "Read its fine print. "
+"This is all your doing. " => "This is all your doing. "
+"I look forward to your coming. " => "I look forward to your coming. "
+
+# Idioms and words that are right as typed
+"I suppose to some extent it works. " => "I suppose to some extent it works. "
+"Did you use to be a teacher? " => "Did you use to be a teacher? "
+"She didn't use to be shy. " => "She didn't use to be shy. "
+"Put your shoe in the box. " => "Put your shoe in the box. "
+"These kind people helped me. " => "These kind people helped me. "
+"We will allot funds to it. " => "We will allot funds to it. "
+"It was a matter of judgement. " => "It was a matter of judgement. "
+"I gave him a piece of my mind. " => "I gave him a piece of my mind. "
+
+# Names the dictionary does not know
+"Hi yatesh how are you " => "Hi yatesh how are you "

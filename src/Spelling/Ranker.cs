@@ -72,7 +72,7 @@ namespace KeyboardWriterHelper
         // Words up to this length are handled cautiously (see Best).
         public const int ShortWord = 3;
         const double MeantMinLog = 4.0, MeantGap = 1.5, WeakPartLog = 4.5;
-        const double CautiousMaxCost = 0.6, CautiousMinLog = 5.0, NameSafeLog = 3.0;
+        const double CautiousMaxCost = 0.6, CautiousMinLog = 5.0, NameSafeLog = 3.0, KnownNameLog = 3.8;
 
         public enum KeyboardLayoutKind { Auto, Qwerty, Qwertz, Azerty, Dvorak, Colemak }
 
@@ -680,6 +680,11 @@ namespace KeyboardWriterHelper
             // word ("teh") is far rarer than the word it was meant to be.
             if (!certain && winner.Cost >= ObscureFixCost && LogFrequency(lower) >= MeantMinLog &&
                 LogFrequency(lower) >= commonness - MeantGap) return null;
+            // An unknown lower-case word turned into a different name ("yatesh" ->
+            // "Yates") is most likely a name the dictionary lacks. Only well-known
+            // names win: days, months, countries, big cities ("londn" -> "London").
+            if (!certain && char.IsLower(typed[0]) && char.IsUpper(winner.Word[0]) && fix != lower &&
+                commonness < KnownNameLog) return null;
             // "approx" -> "approx.": an abbreviation, not a misspelling.
             if (fix.EndsWith(".")) return null;
             if (AcceptVariants && IsSpellingVariant(lower, fix)) return null;
@@ -743,6 +748,8 @@ namespace KeyboardWriterHelper
                 w = w.Substring(0, w.Length - 5) + "ored";
             else if (w.EndsWith("ouring") && w.Length > 7)
                 w = w.Substring(0, w.Length - 6) + "oring";
+            // "judgement", "acknowledgement", "ageing".
+            w = w.Replace("dgement", "dgment").Replace("ageing", "aging");
             w = w.Replace("ise", "ize").Replace("isi", "izi").Replace("isa", "iza")
                  .Replace("yse", "yze").Replace("ysi", "yzi");
             w = w.Replace("elled", "eled").Replace("elling", "eling").Replace("eller", "eler").Replace("ellor", "elor")

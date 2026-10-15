@@ -46,9 +46,11 @@ namespace KeyboardWriterHelper
         static readonly HashSet<string> OtherLanguage = Data.Words("other-language.txt");
         static readonly HashSet<string> Abbreviations = Data.Words("abbreviations.txt");
 
+        // Past forms that are also base verbs or nouns ("saw", "rose", "bit",
+        // "bore") are left out: "I will saw the plank", "has rose gold trim".
         static readonly Dictionary<string, string> PastToBareInfinitive = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            { "went", "go" }, { "saw", "see" }, { "did", "do" }, { "took", "take" }, { "came", "come" },
+            { "went", "go" }, { "did", "do" }, { "took", "take" }, { "came", "come" },
             { "gave", "give" }, { "made", "make" }, { "ate", "eat" }, { "broke", "break" }, { "spoke", "speak" },
             { "wrote", "write" }, { "ran", "run" }, { "knew", "know" }, { "chose", "choose" }, { "drove", "drive" },
             { "fell", "fall" }, { "felt", "feel" }, { "forgot", "forget" }, { "froze", "freeze" }, { "grew", "grow" },
@@ -62,16 +64,17 @@ namespace KeyboardWriterHelper
 
         static readonly Dictionary<string, string> PastToPastParticiple = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            { "went", "gone" }, { "saw", "seen" }, { "did", "done" }, { "took", "taken" }, { "gave", "given" },
+            { "went", "gone" }, { "did", "done" }, { "took", "taken" }, { "gave", "given" },
             { "wrote", "written" }, { "broke", "broken" }, { "spoke", "spoken" }, { "ate", "eaten" }, { "chose", "chosen" },
             { "drove", "driven" }, { "fell", "fallen" }, { "froze", "frozen" }, { "grew", "grown" }, { "hid", "hidden" },
-            { "rode", "ridden" }, { "rose", "risen" }, { "stole", "stolen" }, { "threw", "thrown" }, { "woke", "woken" },
-            { "wore", "worn" }, { "shook", "shaken" }, { "bit", "bitten" }, { "blew", "blown" }, { "drew", "drawn" },
+            { "rode", "ridden" }, { "stole", "stolen" }, { "threw", "thrown" }, { "woke", "woken" },
+            { "wore", "worn" }, { "shook", "shaken" }, { "blew", "blown" }, { "drew", "drawn" },
             { "flew", "flown" }, { "knew", "known" }, { "ran", "run" }, { "came", "come" }, { "began", "begun" },
             { "drank", "drunk" }, { "sang", "sung" }, { "sank", "sunk" }, { "swam", "swum" }, { "rang", "rung" },
-            { "tore", "torn" }, { "swore", "sworn" }, { "bore", "borne" }, { "forgave", "forgiven" }, { "forgot", "forgotten" }
+            { "tore", "torn" }, { "swore", "sworn" }, { "forgave", "forgiven" }, { "forgot", "forgotten" }
         };
 
+        // "he were" is not here: "if he were rich" is correct English.
         static readonly Dictionary<string, string> SubjectVerbAgreement = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             { "they does", "they do" }, { "we does", "we do" }, { "you does", "you do" },
@@ -80,8 +83,35 @@ namespace KeyboardWriterHelper
             { "he don't", "he doesn't" }, { "she don't", "she doesn't" }, { "it don't", "it doesn't" },
             { "he have", "he has" }, { "she have", "she has" }, { "it have", "it has" },
             { "they has", "they have" }, { "we has", "we have" }, { "you has", "you have" },
-            { "i has", "i have" }, { "i is", "i am" }, { "i are", "i am" },
-            { "he were", "he was" }, { "she were", "she was" }
+            { "i has", "i have" }, { "i is", "i am" }, { "i are", "i am" }
+        };
+
+        // Words after which a pronoun starts a plain statement, so "he have" really
+        // is a slip. After anything else ("does it have", "would he have", "let
+        // it have") the bare verb is right, so these fixes need one of them, or
+        // nothing, before the pronoun.
+        static readonly HashSet<string> StatementStarters = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "and", "but", "so", "because", "since", "as", "when", "while", "although", "though",
+            "then", "now", "today", "yesterday", "also", "yes", "no", "well", "oh", "think", "know", "said"
+        };
+
+        // Before a modal or "do", these make it a noun: "the can fell", "his will made".
+        static readonly HashSet<string> NounMakers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "the", "a", "an", "this", "that", "these", "those", "his", "her", "my", "your", "our", "their", "its",
+            "whose", "every", "each", "no", "any", "some", "free", "last", "own", "good", "tin", "trash", "garbage", "watering"
+        };
+
+        // Words that never follow "a" or "an", so "a" there is a letter or a
+        // variable ("points a and b", "if a is zero"), not an article.
+        static readonly HashSet<string> NotAfterArticle = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "and", "or", "is", "in", "if", "of", "on", "at", "as", "it", "its", "are", "am", "an", "a", "also",
+            "else", "either", "each", "every", "into", "onto", "upon", "unless", "until", "us", "our", "ours",
+            "up", "the", "to", "by", "be", "was", "were", "has", "had", "have", "will", "would", "can", "could",
+            "should", "may", "might", "must", "not", "nor", "so", "than", "then", "that", "this", "with", "from",
+            "for", "but", "he", "she", "we", "they", "you", "me", "him", "them", "my", "his", "her", "do", "does", "did"
         };
 
         readonly Func<string, string, bool, Suggestion> suggest; // (word, word before in lower case, cautious)
@@ -758,10 +788,12 @@ namespace KeyboardWriterHelper
                 }
             }
 
-            // 2. Dynamic Article Agreement: a vs an
-            if (prevLower == "a")
+            // 2. Dynamic Article Agreement: a vs an. A capital "A" after another
+            // word is a label, not an article ("Plan A in action", "vitamin A or").
+            bool label = prev == "A" && secondPrev != null;
+            if (prevLower == "a" && !label)
             {
-                if (NeedsAnArticle(currLower))
+                if (NeedsAnArticle(curr))
                 {
                     phraseLead = prev + " ";
                     return (char.IsUpper(prev[0]) ? "An " : "an ") + curr;
@@ -769,15 +801,20 @@ namespace KeyboardWriterHelper
             }
             else if (prevLower == "an")
             {
-                if (NeedsAArticle(currLower))
+                if (NeedsAArticle(curr))
                 {
                     phraseLead = prev + " ";
                     return (char.IsUpper(prev[0]) ? "A " : "a ") + curr;
                 }
             }
 
+            // After "the", "his"... a modal or "do" is a noun ("the can fell",
+            // "his will made it clear"), and "Will" with a capital before a past
+            // form is a name ("Will went home").
+            bool verbal = prev != "Will" && (secondPrev == null || !NounMakers.Contains(secondPrev));
+
             // 3. Modal Verb + Bare Infinitive (modals must take bare infinitive, never past simple)
-            if (IsModalAuxiliary(prevLower))
+            if (verbal && IsModalAuxiliary(prevLower))
             {
                 string infinitive;
                 if (PastToBareInfinitive.TryGetValue(currLower, out infinitive))
@@ -801,7 +838,7 @@ namespace KeyboardWriterHelper
             }
 
             // 5. Do-Support: did/didn't/does/doesn't/do/don't + bare infinitive
-            if (IsDoAuxiliary(prevLower))
+            if (verbal && IsDoAuxiliary(prevLower))
             {
                 string infinitive;
                 if (PastToBareInfinitive.TryGetValue(currLower, out infinitive))
@@ -819,7 +856,7 @@ namespace KeyboardWriterHelper
 
             // 6. Subject-Verb Agreement (Pronoun + Auxiliary/Verb)
             string agreementFix;
-            if (SubjectVerbAgreement.TryGetValue(prevLower + " " + currLower, out agreementFix))
+            if (SubjectVerbAgreement.TryGetValue(prevLower + " " + currLower, out agreementFix) && AgreementApplies(secondPrev, prevLower))
             {
                 phraseLead = prev + " ";
                 if (char.IsUpper(prev[0])) agreementFix = Capital(agreementFix);
@@ -835,94 +872,85 @@ namespace KeyboardWriterHelper
             return null;
         }
 
+        // Only cases where the sound of the word is certain from its letters are
+        // fixed; anything doubtful is left as typed.
+        static readonly string[] SilentH = { "hour", "honest", "honor", "honour", "heir" };
+        // A "u" or "eu" that sounds like "you": "a unit", "a European", "a one-off".
+        static readonly string[] YouSound = { "unit", "uniq", "univ", "unif", "unic", "unilat", "union", "unis", "unan", "use", "usa",
+                                              "usu", "uti", "ute", "uto", "ura", "ure", "uri", "uro", "uku", "ukr", "ubiq", "eu", "ewe" };
+
+        // "a" -> "an"?
         static bool NeedsAnArticle(string word)
         {
-            if (string.IsNullOrEmpty(word) || word.Length < 2) return false;
-            if (char.IsUpper(word[0]) && char.IsUpper(word[1])) return false;
-
-            char first = char.ToLowerInvariant(word[0]);
-
-            if (first == 'h')
+            if (!LooksLikeWord(word)) return false;
+            string w = word.ToLowerInvariant();
+            if (StartsWithAny(w, SilentH)) return true;
+            switch (w[0])
             {
-                return word.StartsWith("hour", StringComparison.OrdinalIgnoreCase) ||
-                       word.StartsWith("honest", StringComparison.OrdinalIgnoreCase) ||
-                       word.StartsWith("honor", StringComparison.OrdinalIgnoreCase) ||
-                       word.StartsWith("honour", StringComparison.OrdinalIgnoreCase) ||
-                       word.StartsWith("heir", StringComparison.OrdinalIgnoreCase);
-            }
-
-            if (first != 'a' && first != 'e' && first != 'i' && first != 'o' && first != 'u')
-                return false;
-
-            if (first == 'u')
-            {
-                if (word.StartsWith("user", StringComparison.OrdinalIgnoreCase) ||
-                    word.StartsWith("usag", StringComparison.OrdinalIgnoreCase) ||
-                    word.StartsWith("usef", StringComparison.OrdinalIgnoreCase) ||
-                    word.StartsWith("usel", StringComparison.OrdinalIgnoreCase) ||
-                    word.StartsWith("unit", StringComparison.OrdinalIgnoreCase) ||
-                    word.StartsWith("uniq", StringComparison.OrdinalIgnoreCase) ||
-                    word.StartsWith("univ", StringComparison.OrdinalIgnoreCase) ||
-                    word.StartsWith("unif", StringComparison.OrdinalIgnoreCase) ||
-                    word.StartsWith("unic", StringComparison.OrdinalIgnoreCase) ||
-                    word.StartsWith("util", StringComparison.OrdinalIgnoreCase) ||
-                    word.StartsWith("utop", StringComparison.OrdinalIgnoreCase) ||
-                    word.StartsWith("usua", StringComparison.OrdinalIgnoreCase) ||
-                    word.StartsWith("ubiq", StringComparison.OrdinalIgnoreCase) ||
-                    word.StartsWith("unilat", StringComparison.OrdinalIgnoreCase) ||
-                    word.StartsWith("uro", StringComparison.OrdinalIgnoreCase))
+                case 'a':
+                case 'i':
+                    return true;
+                case 'e':
+                    return !StartsWithAny(w, YouSound);
+                case 'o':
+                    return w != "one" && w != "once" && !w.StartsWith("oui");
+                case 'u':
+                    // "un-" words and two consonants after the "u" sound like "uh":
+                    // unusual, umbrella, upset, urgent, utter. Not "unit", "use",
+                    // "unanimous", and "uni-" can go either way (unique, unimportant).
+                    if (w.Length < 3 || StartsWithAny(w, YouSound)) return false;
+                    if (w.StartsWith("un")) return w.Length > 3 && !w.StartsWith("uni");
+                    return !IsVowelLetter(w[1]) && !IsVowelLetter(w[2]);
+                default:
                     return false;
-                return true;
             }
+        }
 
-            if (word.StartsWith("eu", StringComparison.OrdinalIgnoreCase)) return false;
-            if (word.StartsWith("one", StringComparison.OrdinalIgnoreCase) || word.Equals("once", StringComparison.OrdinalIgnoreCase)) return false;
-
+        // "an" -> "a"?
+        static bool NeedsAArticle(string word)
+        {
+            if (!LooksLikeWord(word)) return false;
+            string w = word.ToLowerInvariant();
+            char first = w[0];
+            if (StartsWithAny(w, YouSound) || w == "one" || w == "once") return true;
+            if (IsVowelLetter(first)) return false;
+            // "an herb", "an historic", "an X-ray", "an Xbox" are all used.
+            if (first == 'h' || first == 'x') return false;
+            // Short words after these letters are usually acronyms said letter by
+            // letter: "an mri", "an nda", "an fbi agent", "an sos".
+            if ("flmnrs".IndexOf(first) >= 0 && w.Length <= 3) return false;
             return true;
         }
 
-        static bool NeedsAArticle(string word)
+        // A word, not a letter, an acronym ("FBI", "usb", "mp3") or a word that
+        // never follows an article.
+        static bool LooksLikeWord(string word)
         {
             if (string.IsNullOrEmpty(word) || word.Length < 2) return false;
             if (char.IsUpper(word[0]) && char.IsUpper(word[1])) return false;
-
-            char first = char.ToLowerInvariant(word[0]);
-
-            if (word.StartsWith("user", StringComparison.OrdinalIgnoreCase) ||
-                word.StartsWith("usag", StringComparison.OrdinalIgnoreCase) ||
-                word.StartsWith("usef", StringComparison.OrdinalIgnoreCase) ||
-                word.StartsWith("usel", StringComparison.OrdinalIgnoreCase) ||
-                word.StartsWith("unit", StringComparison.OrdinalIgnoreCase) ||
-                word.StartsWith("uniq", StringComparison.OrdinalIgnoreCase) ||
-                word.StartsWith("univ", StringComparison.OrdinalIgnoreCase) ||
-                word.StartsWith("unif", StringComparison.OrdinalIgnoreCase) ||
-                word.StartsWith("unic", StringComparison.OrdinalIgnoreCase) ||
-                word.StartsWith("util", StringComparison.OrdinalIgnoreCase) ||
-                word.StartsWith("utop", StringComparison.OrdinalIgnoreCase) ||
-                word.StartsWith("usua", StringComparison.OrdinalIgnoreCase) ||
-                word.StartsWith("ubiq", StringComparison.OrdinalIgnoreCase) ||
-                word.StartsWith("unilat", StringComparison.OrdinalIgnoreCase) ||
-                word.StartsWith("uro", StringComparison.OrdinalIgnoreCase) ||
-                word.StartsWith("eu", StringComparison.OrdinalIgnoreCase) ||
-                word.StartsWith("one", StringComparison.OrdinalIgnoreCase) ||
-                word.Equals("once", StringComparison.OrdinalIgnoreCase))
-                return true;
-
-            if (first == 'h')
-            {
-                if (word.StartsWith("hour", StringComparison.OrdinalIgnoreCase) ||
-                    word.StartsWith("honest", StringComparison.OrdinalIgnoreCase) ||
-                    word.StartsWith("honor", StringComparison.OrdinalIgnoreCase) ||
-                    word.StartsWith("honour", StringComparison.OrdinalIgnoreCase) ||
-                    word.StartsWith("heir", StringComparison.OrdinalIgnoreCase))
-                    return false;
-                return true;
-            }
-
-            if (first != 'a' && first != 'e' && first != 'i' && first != 'o' && first != 'u')
-                return true;
-
+            if (NotAfterArticle.Contains(word) || NeverCorrect.Contains(word)) return false;
+            for (int i = 1; i < word.Length; i++)
+                if ("aeiouyAEIOUY".IndexOf(word[i]) >= 0) return true;
             return false;
+        }
+
+        static bool IsVowelLetter(char c) { return "aeiou".IndexOf(c) >= 0; }
+
+        static bool StartsWithAny(string word, string[] prefixes)
+        {
+            foreach (string prefix in prefixes)
+                if (word.StartsWith(prefix, StringComparison.Ordinal)) return true;
+            return false;
+        }
+
+        // Subject-verb fixes for he, she, it, I and you need a plain statement:
+        // "he have a car", not "does it have", "would he have", "each of you is",
+        // "a thank you is enough" or "Phase I is". "they was" and "we has" are
+        // wrong wherever they stand.
+        static bool AgreementApplies(string secondPrev, string pronoun)
+        {
+            if (pronoun == "they" || pronoun == "we") return true;
+            return secondPrev == null || StatementStarters.Contains(secondPrev);
         }
 
         static bool IsModalAuxiliary(string word)
