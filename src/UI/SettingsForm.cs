@@ -39,6 +39,12 @@ namespace KeyboardWriterHelper
         public SettingsForm(TrayApp app)
         {
             this.app = app;
+            // Everything below is laid out in pixels at 96 DPI; Windows scaling
+            // (125%, 150%...) then grows the window and its controls together,
+            // instead of only the text, which got cut off.
+            SuspendLayout();
+            AutoScaleDimensions = new SizeF(96F, 96F);
+            AutoScaleMode = AutoScaleMode.Dpi;
             Text = TrayApp.AppName + " - settings";
             StartPosition = FormStartPosition.CenterScreen;
             ClientSize = new Size(Wide + 2 * Left0 + 8, 440);
@@ -62,6 +68,7 @@ namespace KeyboardWriterHelper
             tabs.TabPages.Add(TyposTab());
             tabs.TabPages.Add(StatsTab());
             Controls.Add(tabs);
+            ResumeLayout(false);
 
             refresh.Interval = 1000;
             refresh.Tick += delegate { Reload(); };
@@ -372,7 +379,7 @@ namespace KeyboardWriterHelper
             {
                 MessageBox.Show(this,
                     "Write it as  typo=correction , for example  brb=be right back .\r\n\r\n" +
-                    "The left side is one word or two words, made of letters.",
+                    "The left side is one to four words, made of letters.",
                     Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return false;
             }
@@ -380,12 +387,12 @@ namespace KeyboardWriterHelper
             return true;
         }
 
-        // One word or two, made of letters (an apostrophe inside is fine): only
-        // that can be recognised as it is typed.
+        // One to four words (as many as the engine looks back), made of letters
+        // (an apostrophe inside is fine): only that can be recognised as it is typed.
         static bool IsTypable(string text)
         {
             string[] words = text.Split(' ');
-            if (words.Length > 2) return false;
+            if (words.Length > 4) return false;
             foreach (string w in words)
             {
                 if (w.Length == 0 || !char.IsLetter(w[0])) return false;

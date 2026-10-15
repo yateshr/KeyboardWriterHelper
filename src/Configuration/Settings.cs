@@ -129,51 +129,44 @@ namespace KeyboardWriterHelper
                 }
             }
             catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
 
+        // Writes a whole file so that a crash or a full disk never leaves it half
+        // written: to a temporary file next to it, which then replaces it. Throws
+        // IOException or UnauthorizedAccessException when that is not possible
+        // (the file open elsewhere, read-only); the old file is then untouched.
         internal static void SafeWriteAllText(string targetPath, string content)
         {
             if (string.IsNullOrEmpty(targetPath)) return;
             string dir = Path.GetDirectoryName(targetPath);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
             string temp = targetPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
-            File.WriteAllText(temp, content, Encoding.UTF8);
-            if (File.Exists(targetPath))
+            try
             {
-                try { File.Replace(temp, targetPath, null, true); }
-                catch
+                File.WriteAllText(temp, content, Encoding.UTF8);
+                if (!File.Exists(targetPath)) File.Move(temp, targetPath);
+                else
                 {
-                    File.Delete(targetPath);
-                    File.Move(temp, targetPath);
+                    // Copying over is not atomic, but unlike deleting first it never
+                    // leaves no file at all (some network drives cannot Replace).
+                    try { File.Replace(temp, targetPath, null, true); }
+                    catch (PlatformNotSupportedException) { File.Copy(temp, targetPath, true); }
                 }
             }
-            else
+            finally
             {
-                File.Move(temp, targetPath);
+                try { if (File.Exists(temp)) File.Delete(temp); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
             }
         }
 
         internal static void SafeWriteAllLines(string targetPath, string[] lines)
         {
-            if (string.IsNullOrEmpty(targetPath)) return;
-            string dir = Path.GetDirectoryName(targetPath);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
-            string temp = targetPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
-            File.WriteAllLines(temp, lines, Encoding.UTF8);
-            if (File.Exists(targetPath))
-            {
-                try { File.Replace(temp, targetPath, null, true); }
-                catch
-                {
-                    File.Delete(targetPath);
-                    File.Move(temp, targetPath);
-                }
-            }
-            else
-            {
-                File.Move(temp, targetPath);
-            }
+            SafeWriteAllText(targetPath, string.Join("\r\n", lines) + "\r\n");
         }
+
         public void Save()
         {
             if (path == null) return;
@@ -200,6 +193,7 @@ namespace KeyboardWriterHelper
                     "nextHotkey=" + NextHotkey + "\r\n");
             }
             catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
 
         static string Text(bool value) { return (value ? "true" : "false") + "\r\n"; }
@@ -222,7 +216,11 @@ namespace KeyboardWriterHelper
         readonly string header;
         readonly bool pairs;
         DateTime loadedStamp = DateTime.MinValue;
-        bool unsaved;
+        // Edits not written yet, in order: (line or key, true = added). Kept so
+        // that edits made in Notepad meanwhile can be merged instead of overwritten.
+        readonly List<KeyValuePair<string, bool>> pending = new List<KeyValuePair<string, bool>>();
+        // The file does not exist yet and must be written with the defaults.
+        bool mustCreate;
 
         public readonly string FilePath;
 
@@ -231,11 +229,20 @@ namespace KeyboardWriterHelper
             FilePath = path;
             this.header = header;
             this.pairs = pairs;
-            if (File.Exists(path)) Reload();
+            if (File.Exists(path))
+            {
+                try
+                {
+                    loadedStamp = File.GetLastWriteTimeUtc(path);
+                    Load(File.ReadAllLines(path));
+                }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
             else
             {
                 foreach (string entry in defaults) Put(entry);
-                unsaved = true;
+                mustCreate = true;
                 Sync();
             }
         }
@@ -248,24 +255,22 @@ namespace KeyboardWriterHelper
             else if (eq > 0 && eq < line.Length - 1) entries[line.Substring(0, eq).Trim()] = line.Substring(eq + 1).Trim();
         }
 
-        void Reload()
+        // Call with the gate held, or before other threads can see this list.
+        void Load(string[] lines)
         {
-            try
+            entries.Clear();
+            foreach (string line in lines)
             {
-                DateTime stamp = File.GetLastWriteTimeUtc(FilePath);
-                string[] lines = File.ReadAllLines(FilePath);
-                lock (gate)
-                {
-                    loadedStamp = stamp;
-                    entries.Clear();
-                    foreach (string line in lines)
-                    {
-                        string entry = line.Trim();
-                        if (entry.Length > 0 && !entry.StartsWith("#")) Put(entry);
-                    }
-                }
+                string entry = line.Trim();
+                if (entry.Length > 0 && !entry.StartsWith("#")) Put(entry);
             }
-            catch (IOException) { }
+        }
+
+        // The key of an entry: the whole line, or what stands before "=".
+        string KeyOf(string entry)
+        {
+            int eq = pairs ? entry.IndexOf('=') : -1;
+            return eq > 0 ? entry.Substring(0, eq).Trim() : entry;
         }
 
         public bool Contains(string entry)
@@ -301,40 +306,55 @@ namespace KeyboardWriterHelper
             lock (gate)
             {
                 Put(entry);
-                unsaved = true;
+                pending.Add(new KeyValuePair<string, bool>(entry, true));
             }
         }
 
         public void Remove(string entry)
         {
-            int eq = pairs ? entry.IndexOf('=') : -1;
+            string key = KeyOf(entry);
             lock (gate)
-                if (entries.Remove(eq > 0 ? entry.Substring(0, eq).Trim() : entry)) unsaved = true;
+                if (entries.Remove(key)) pending.Add(new KeyValuePair<string, bool>(key, false));
         }
 
-        // Saves changes, or picks up edits made in Notepad.
+        // Saves changes and picks up edits made in Notepad. When both happened,
+        // the file as it is now is taken and the edits made here go on top.
         public void Sync()
         {
             try
             {
-                string[] toSave = null;
+                DateTime onDisk = File.Exists(FilePath) ? File.GetLastWriteTimeUtc(FilePath) : DateTime.MinValue;
+                string[] diskLines = onDisk != DateTime.MinValue && onDisk != loadedStamp ? File.ReadAllLines(FilePath) : null;
+                string[] toSave;
+                int written;
                 lock (gate)
                 {
-                    if (unsaved) toSave = All();
-                }
-                if (toSave != null)
-                {
-                    string content = header + "\r\n" + string.Join("\r\n", toSave) + (toSave.Length > 0 ? "\r\n" : "");
-                    Settings.SafeWriteAllText(FilePath, content);
-                    lock (gate)
+                    if (diskLines != null)
                     {
-                        unsaved = false;
-                        loadedStamp = File.GetLastWriteTimeUtc(FilePath);
+                        Load(diskLines);
+                        loadedStamp = onDisk;
+                        foreach (KeyValuePair<string, bool> edit in pending)
+                        {
+                            if (edit.Value) Put(edit.Key);
+                            else entries.Remove(edit.Key);
+                        }
                     }
+                    if (pending.Count == 0 && !mustCreate) return;
+                    toSave = All();
+                    written = pending.Count;
                 }
-                else if (File.GetLastWriteTimeUtc(FilePath) != loadedStamp) Reload();
+                string content = header + "\r\n" + string.Join("\r\n", toSave) + (toSave.Length > 0 ? "\r\n" : "");
+                Settings.SafeWriteAllText(FilePath, content);
+                lock (gate)
+                {
+                    // Edits made while the file was being written wait for the next Sync.
+                    pending.RemoveRange(0, written);
+                    mustCreate = false;
+                    loadedStamp = File.GetLastWriteTimeUtc(FilePath);
+                }
             }
             catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
 
         public static ListFile MyWords(string folder)
@@ -347,7 +367,7 @@ namespace KeyboardWriterHelper
         {
             return new ListFile(Path.Combine(folder, "my-fixes.txt"),
                 "# Your own fixes and shortcuts, one per line:  typo=correction\r\n" +
-                "# The left side is one word, or two words (\"could of=could have\").", new string[0], true);
+                "# The left side is one to four words (\"could of been=could have been\").", new string[0], true);
         }
 
         // Starts as data\excluded-apps.txt; from then on the list is the user's.
@@ -370,7 +390,9 @@ namespace KeyboardWriterHelper
         // "typed<tab>fix" -> times
         readonly Dictionary<string, int> counts = new Dictionary<string, int>(StringComparer.Ordinal);
         readonly string path;
-        bool unsaved;
+        // Count changes made and written, so a change made while the file is
+        // being written is not taken as saved.
+        int changes, savedChanges;
 
         public TypoLog(string path, bool load)
         {
@@ -387,6 +409,7 @@ namespace KeyboardWriterHelper
                 }
             }
             catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
 
         // change = +1 for a fix made, -1 for one taken back.
@@ -418,7 +441,7 @@ namespace KeyboardWriterHelper
                             counts.Remove(pairs[i].Key);
                     }
                 }
-                unsaved = true;
+                changes++;
             }
         }
 
@@ -444,9 +467,11 @@ namespace KeyboardWriterHelper
         public void Save()
         {
             string[] lines;
+            int now;
             lock (gate)
             {
-                if (!unsaved) return;
+                if (changes == savedChanges) return;
+                now = changes;
                 lines = new string[counts.Count];
                 int i = 0;
                 foreach (KeyValuePair<string, int> entry in counts) lines[i++] = entry.Value + "\t" + entry.Key;
@@ -454,9 +479,10 @@ namespace KeyboardWriterHelper
             try
             {
                 Settings.SafeWriteAllLines(path, lines);
-                lock (gate) unsaved = false;
+                lock (gate) savedChanges = now;
             }
             catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
 
         // Removes the file; the counts of this session stay in memory.
@@ -464,7 +490,7 @@ namespace KeyboardWriterHelper
         {
             try { File.Delete(path); }
             catch (IOException) { }
-            lock (gate) unsaved = true;
+            lock (gate) changes++;
         }
     }
 }

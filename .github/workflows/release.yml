@@ -27,14 +27,14 @@ jobs:
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: '10.0.x'
 
       - name: Build with .NET Framework 4.0 (csc.exe)
         shell: cmd
         run: build.cmd
 
-      - name: Publish .NET 9 Standalone Single-File
-        run: dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o dist/net9-x64
+      - name: Publish .NET 10 Standalone Single-File
+        run: dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o dist/net10-x64
 
       - name: Run Full Test Suite
         shell: cmd
@@ -52,7 +52,7 @@ jobs:
 
           # Standalone executables
           Copy-Item KeyboardWriterHelper.exe -Destination release-dist/KeyboardWriterHelper-net40.exe
-          Copy-Item dist/net9-x64/KeyboardWriterHelper.exe -Destination release-dist/KeyboardWriterHelper-net9-x64.exe
+          Copy-Item dist/net10-x64/KeyboardWriterHelper.exe -Destination release-dist/KeyboardWriterHelper-net10-x64.exe
 
           # Package Zip 1: Classic .NET 4.0 bundle
           $net40Folder = "release-dist/KeyboardWriterHelper-$tag-net40"
@@ -63,14 +63,14 @@ jobs:
           Compress-Archive -Path "$net40Folder/*" -DestinationPath "release-dist/KeyboardWriterHelper-$tag-net40.zip" -Force
           Remove-Item -Recurse -Force $net40Folder
 
-          # Package Zip 2: Modern .NET 9 bundle
-          $net9Folder = "release-dist/KeyboardWriterHelper-$tag-win-x64"
-          New-Item -ItemType Directory -Force -Path $net9Folder | Out-Null
-          Copy-Item dist/net9-x64/KeyboardWriterHelper.exe -Destination "$net9Folder/KeyboardWriterHelper.exe"
-          Copy-Item README.md -Destination "$net9Folder/README.md"
-          Copy-Item ROADMAP.md -Destination "$net9Folder/ROADMAP.md"
-          Compress-Archive -Path "$net9Folder/*" -DestinationPath "release-dist/KeyboardWriterHelper-$tag-win-x64.zip" -Force
-          Remove-Item -Recurse -Force $net9Folder
+          # Package Zip 2: Modern .NET 10 bundle
+          $netFolder = "release-dist/KeyboardWriterHelper-$tag-win-x64"
+          New-Item -ItemType Directory -Force -Path $netFolder | Out-Null
+          Copy-Item dist/net10-x64/KeyboardWriterHelper.exe -Destination "$netFolder/KeyboardWriterHelper.exe"
+          Copy-Item README.md -Destination "$netFolder/README.md"
+          Copy-Item ROADMAP.md -Destination "$netFolder/ROADMAP.md"
+          Compress-Archive -Path "$netFolder/*" -DestinationPath "release-dist/KeyboardWriterHelper-$tag-win-x64.zip" -Force
+          Remove-Item -Recurse -Force $netFolder
 
           # Compute SHA-256 Checksums
           Set-Location release-dist

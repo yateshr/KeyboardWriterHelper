@@ -38,11 +38,15 @@ namespace KeyboardWriterHelper
                     }
                 }
             }
-            if (stream == null && File.Exists(name))
+            // Not built in: a file of that name next to the exe (not in the current
+            // folder, which could be any folder the app was started from).
+            string beside = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, name);
+            if (stream == null && File.Exists(beside))
             {
-                try { stream = File.OpenRead(name); } catch { }
+                try { stream = File.OpenRead(beside); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
             }
-
             return stream;
         }
         public static bool HasResource(string name)

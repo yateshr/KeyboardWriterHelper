@@ -36,9 +36,15 @@ set GEN=%TEMP%\KeyboardWriterHelper.Version.cs
 >>"%GEN%" echo [assembly: System.Reflection.AssemblyFileVersion("%MAJOR%.%MINOR%.%REV%.0")]
 >>"%GEN%" echo [assembly: System.Reflection.AssemblyInformationalVersion("%SHOWN%")]
 
+rem english-model.bin holds the same counts as the text lists in a compact
+rem form; the text lists are only built in when it is missing.
+if exist english-model.bin goto model
 set RES=/resource:english-frequency.txt,english-frequency.txt /resource:english-pairs.txt,english-pairs.txt
 if exist english-trigrams.txt set RES=%RES% /resource:english-trigrams.txt,english-trigrams.txt
-if exist english-model.bin set RES=%RES% /resource:english-model.bin,english-model.bin
+goto resources
+:model
+set RES=/resource:english-model.bin,english-model.bin
+:resources
 for %%f in (data\*.txt) do call set RES=%%RES%% /resource:%%f,%%~nxf
 
 set OUT=%KWH_OUT%

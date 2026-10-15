@@ -53,7 +53,8 @@ namespace KeyboardWriterHelper
             BackColor = Color.FromArgb(32, 34, 38);
             ForeColor = Color.White;
             Font = new Font("Segoe UI", 9.5f, FontStyle.Regular);
-            Size = new Size(320, 36);
+            // Font.Height grows with Windows scaling; the pill grows with it.
+            Size = new Size(320, Math.Max(36, Font.Height + 16));
             AccessibleName = "Word Suggestions";
             AccessibleRole = AccessibleRole.ToolTip;
 

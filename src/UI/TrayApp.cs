@@ -48,6 +48,8 @@ namespace KeyboardWriterHelper
         // Totals from earlier runs; counts only, never text.
         long baseWords, baseCorrections, baseUndone;
         string lastStats, lastLifetime;
+        static readonly TimeSpan StatsInterval = TimeSpan.FromSeconds(30);
+        DateTime statsWrittenAt = DateTime.MinValue;
         // The program in front, ignoring this app's own windows.
         string currentApp = "";
         // When a "pause for..." ends; MinValue when there is none.
@@ -62,7 +64,9 @@ namespace KeyboardWriterHelper
             statsPath = Path.Combine(folder, "stats.txt");
             lifetimePath = Path.Combine(folder, "lifetime.txt");
             ownExe = Path.GetFileName(Application.ExecutablePath);
-            settings = new Settings(Path.Combine(folder, "settings.txt"));
+            string settingsPath = Path.Combine(folder, "settings.txt");
+            bool firstRun = !File.Exists(settingsPath);
+            settings = new Settings(settingsPath);
             myWords = ListFile.MyWords(folder);
             myFixes = ListFile.MyFixes(folder);
             excludedApps = ListFile.ExcludedApps(folder);
@@ -113,47 +117,21 @@ namespace KeyboardWriterHelper
             corrector.Changed += OnChanged;
             corrector.CandidateOffered += delegate(string fix, string[] choices)
             {
-                if (!settings.ShowCandidatePopup) return;
-                ui.BeginInvoke((System.Windows.Forms.MethodInvoker)delegate
-                {
-                    IntPtr fg = Native.GetForegroundWindow();
-                    candidatePopup.ShowCandidates(fix, choices, fg);
-                });
+                if (settings.ShowCandidatePopup) OnUi(delegate { candidatePopup.ShowCandidates(fix, choices, Native.GetForegroundWindow()); });
             };
-            corrector.CandidateDismissed += delegate
-            {
-                ui.BeginInvoke((System.Windows.Forms.MethodInvoker)delegate
-                {
-                    candidatePopup.Dismiss();
-                });
-            };
+            corrector.CandidateDismissed += delegate { OnUi(candidatePopup.Dismiss); };
             corrector.PredictionOffered += delegate(string pred, string pfx)
             {
-                if (!settings.SmartCompose || !settings.ShowCandidatePopup) return;
-                ui.BeginInvoke((System.Windows.Forms.MethodInvoker)delegate
-                {
-                    IntPtr fg = Native.GetForegroundWindow();
-                    candidatePopup.ShowPrediction(pred, pfx, fg);
-                });
+                if (settings.SmartCompose && settings.ShowCandidatePopup)
+                    OnUi(delegate { candidatePopup.ShowPrediction(pred, pfx, Native.GetForegroundWindow()); });
             };
-
-            corrector.PredictionDismissed += delegate
-            {
-                ui.BeginInvoke((System.Windows.Forms.MethodInvoker)delegate
-                {
-                    candidatePopup.Dismiss();
-                });
-            };
-
+            corrector.PredictionDismissed += delegate { OnUi(candidatePopup.Dismiss); };
             corrector.Learned += delegate(string word)
             {
-                ui.BeginInvoke((System.Windows.Forms.MethodInvoker)delegate { Say("\"" + word + "\" will not be corrected any more (you undid it twice)."); });
+                OnUi(delegate { Say("\"" + word + "\" will not be corrected any more (you undid it twice)."); });
             };
             // The hotkey gives no other sign that it worked, so say so.
-            corrector.EnabledChanged += delegate
-            {
-                ui.BeginInvoke((System.Windows.Forms.MethodInvoker)delegate { pausedUntil = DateTime.MinValue; ShowState(); AnnounceState(); });
-            };
+            corrector.EnabledChanged += delegate { OnUi(delegate { pausedUntil = DateTime.MinValue; ShowState(); AnnounceState(); }); };
 
             ShowState();
             tray.Visible = true;
@@ -161,13 +139,30 @@ namespace KeyboardWriterHelper
             housekeeping.Interval = 1000;
             housekeeping.Tick += delegate { Housekeeping(); };
             housekeeping.Start();
-            tray.ShowBalloonTip(6000, AppName,
-                "Running. Misspelled words are fixed when you press Space. Press Backspace right after a fix to undo it.",
-                ToolTipIcon.Info);
+            // Once, not at every sign-in.
+            if (firstRun)
+                tray.ShowBalloonTip(6000, AppName,
+                    "Running. Misspelled words are fixed when you press Space. Press Backspace right after a fix to undo it.",
+                    ToolTipIcon.Info);
             AppDomain.CurrentDomain.ProcessExit += delegate { DisposeResources(); };
             AppDomain.CurrentDomain.UnhandledException += delegate { DisposeResources(); };
             Application.ApplicationExit += delegate { DisposeResources(); };
         }
+        // Runs action on the UI thread. Called from the keyboard and mouse threads,
+        // possibly while the app is closing.
+        void OnUi(System.Windows.Forms.MethodInvoker action)
+        {
+            try { if (!ui.IsDisposed) ui.BeginInvoke(action); }
+            catch (InvalidOperationException) { }
+        }
+
+        // An exception on the UI thread: shown in the tray menu and the statistics
+        // instead of a crash dialog.
+        public void ReportError(Exception ex)
+        {
+            counters.Error(ex);
+        }
+
         bool disposedResources;
         void DisposeResources()
         {
@@ -327,8 +322,11 @@ namespace KeyboardWriterHelper
             string until = pausedUntil == DateTime.MinValue ? "" : " until " + pausedUntil.ToString("HH:mm");
             enabledItem.Checked = on;
             enabledItem.Text = "Auto-correct on   (" + settings.PauseHotkey + ")";
-            tray.Icon = !on ? iconOff : skipped ? iconSkipped : iconOn;
-            tray.Text = Clip(AppName + (!on ? " - paused" + until : skipped ? " - skipped in " + currentApp : " - on"));
+            // Called every second: only tell the shell when something changed.
+            Icon icon = !on ? iconOff : skipped ? iconSkipped : iconOn;
+            string text = Clip(AppName + (!on ? " - paused" + until : skipped ? " - skipped in " + currentApp : " - on"));
+            if (tray.Icon != icon) tray.Icon = icon;
+            if (tray.Text != text) tray.Text = text;
         }
 
         static string Clip(string text)
@@ -387,7 +385,13 @@ namespace KeyboardWriterHelper
             myFixes.Sync();
             excludedApps.Sync();
             if (settings.RememberTypos) typos.Save();
-            WriteStats();
+            // The counters change with every key; writing them each second while
+            // typing is needless disk work. Also written at exit.
+            if (DateTime.UtcNow - statsWrittenAt >= StatsInterval)
+            {
+                statsWrittenAt = DateTime.UtcNow;
+                WriteStats();
+            }
 
             if (pausedUntil != DateTime.MinValue && DateTime.Now >= pausedUntil)
             {
@@ -458,6 +462,7 @@ namespace KeyboardWriterHelper
                 }
             }
             catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
 
         // Health counters for troubleshooting. Numbers only, never typed text.
@@ -473,24 +478,26 @@ namespace KeyboardWriterHelper
                 "errors: " + counters.Errors + "\r\n" +
                 "last error: " + (counters.LastError ?? "none") + "\r\n";
             if (body == lastStats) return;
-            lastStats = body;
             try
             {
                 File.WriteAllText(statsPath,
                     AppName + " " + Program.Version + " - counters only, never what you typed\r\n" +
                     "running since: " + startedAt.ToString("yyyy-MM-dd HH:mm:ss") + "\r\n" +
                     "updated: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "\r\n" + body);
+                lastStats = body;
                 string life =
                     "words=" + (baseWords + counters.Words) + "\r\n" +
                     "corrections=" + (baseCorrections + counters.Corrections) + "\r\n" +
                     "undone=" + (baseUndone + counters.Undone) + "\r\n";
                 if (life != lastLifetime)
                 {
+                    // The all-time totals must survive a crash while writing.
+                    Settings.SafeWriteAllText(lifetimePath, life);
                     lastLifetime = life;
-                    File.WriteAllText(lifetimePath, life);
                 }
             }
             catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
 
         // ---- Start with Windows ----

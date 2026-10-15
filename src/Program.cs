@@ -66,10 +66,18 @@ namespace KeyboardWriterHelper
                 // Every key waits for the keyboard thread; avoid long blocking
                 // garbage collections while it runs.
                 System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.SustainedLowLatency;
+                // A bug in a menu or the settings window must not end the app (and
+                // with it auto-correct); it is shown in the tray menu instead.
+                Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+                TrayApp app = null;
+                Application.ThreadException += delegate(object sender, ThreadExceptionEventArgs e)
+                {
+                    if (app != null) app.ReportError(e.Exception);
+                };
                 try
                 {
-                    Application.Run(new TrayApp(
-                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "KeyboardWriterHelper")));
+                    app = new TrayApp(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "KeyboardWriterHelper"));
+                    Application.Run(app);
                 }
                 catch (Exception ex)
                 {

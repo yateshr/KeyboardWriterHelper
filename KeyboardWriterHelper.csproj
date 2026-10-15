@@ -2,28 +2,32 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net9.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>disable</Nullable>
     <RootNamespace>KeyboardWriterHelper</RootNamespace>
     <AssemblyName>KeyboardWriterHelper</AssemblyName>
+    <!-- The same version as build.cmd: from version.txt. -->
+    <Version>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\version.txt').Trim())</Version>
     <StartupObject>KeyboardWriterHelper.Program</StartupObject>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <NoWarn>$(NoWarn);WFO0003</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="english-frequency.txt">
-      <LogicalName>english-frequency.txt</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="english-pairs.txt">
-      <LogicalName>english-pairs.txt</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="english-trigrams.txt" Condition="Exists('english-trigrams.txt')">
-      <LogicalName>english-trigrams.txt</LogicalName>
-    </EmbeddedResource>
+    <!-- english-model.bin holds the same counts as the three text lists in a
+         compact form; the text lists are only built in when it is missing. -->
     <EmbeddedResource Include="english-model.bin" Condition="Exists('english-model.bin')">
       <LogicalName>english-model.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="english-frequency.txt" Condition="!Exists('english-model.bin')">
+      <LogicalName>english-frequency.txt</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="english-pairs.txt" Condition="!Exists('english-model.bin')">
+      <LogicalName>english-pairs.txt</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="english-trigrams.txt" Condition="!Exists('english-model.bin') And Exists('english-trigrams.txt')">
+      <LogicalName>english-trigrams.txt</LogicalName>
     </EmbeddedResource>
     <EmbeddedResource Include="data\*.txt">
       <LogicalName>%(Filename)%(Extension)</LogicalName>
