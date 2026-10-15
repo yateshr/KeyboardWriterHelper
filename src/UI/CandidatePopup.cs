@@ -35,6 +35,12 @@ namespace KeyboardWriterHelper
 
         string[] currentChoices = new string[0];
 
+        bool isPredictionMode;
+
+        string predictionWord = "";
+
+        string predictionPrefix = "";
+
     
 
         protected override bool ShowWithoutActivation { get { return true; } }
@@ -105,6 +111,8 @@ namespace KeyboardWriterHelper
 
             if (choices == null || choices.Length == 0) { Hide(); return; }
 
+            isPredictionMode = false;
+
             currentFix = fix;
 
             currentChoices = choices;
@@ -141,8 +149,38 @@ namespace KeyboardWriterHelper
 
             }
 
-    
+            PositionPopup(foreground);
 
+            Invalidate();
+
+            if (!Visible) Show();
+
+        }
+
+        public void ShowPrediction(string prediction, string prefix, IntPtr foreground)
+        {
+            if (string.IsNullOrEmpty(prediction)) { Dismiss(); return; }
+            isPredictionMode = true;
+            predictionWord = prediction;
+            predictionPrefix = prefix ?? "";
+            AccessibleDescription = "Tab to accept prediction: " + prediction;
+            hideTimer.Stop();
+            hideTimer.Start();
+
+            using (Graphics g = CreateGraphics())
+            {
+                SizeF szTab = g.MeasureString("⇥ Tab", Font);
+                SizeF szWord = g.MeasureString(prediction, Font);
+                Width = Math.Max(180, (int)(szTab.Width + szWord.Width + 56));
+            }
+
+            PositionPopup(foreground);
+            Invalidate();
+            if (!Visible) Show();
+        }
+
+        void PositionPopup(IntPtr foreground)
+        {
             Point target = Point.Empty;
 
             bool foundCaret = false;
@@ -224,22 +262,15 @@ namespace KeyboardWriterHelper
                 }
 
             }
-
-    
-
-            Invalidate();
-
-            if (!Visible) Show();
-
         }
-
-    
 
         public void Dismiss()
 
         {
 
             hideTimer.Stop();
+
+            isPredictionMode = false;
 
             Hide();
 
@@ -276,6 +307,28 @@ namespace KeyboardWriterHelper
             int x = 12;
 
             int y = (Height - Font.Height) / 2;
+
+            if (isPredictionMode)
+            {
+                string tabBadge = "⇥ Tab";
+                SizeF tabSz = g.MeasureString(tabBadge, Font);
+                Rectangle pill = new Rectangle(x - 4, 4, (int)tabSz.Width + 8, Height - 8);
+                using (GraphicsPath p = RoundedRect(pill, 4))
+                using (SolidBrush b = new SolidBrush(Color.FromArgb(37, 99, 235)))
+                    g.FillPath(b, p);
+                using (SolidBrush txt = new SolidBrush(Color.White))
+                    g.DrawString(tabBadge, Font, txt, x, y);
+
+                x += (int)tabSz.Width + 14;
+
+                using (SolidBrush wordBrush = new SolidBrush(Color.FromArgb(240, 243, 246)))
+                    g.DrawString(predictionWord, Font, wordBrush, x, y);
+
+                string esc = "Esc";
+                using (SolidBrush hintBrush = new SolidBrush(Color.FromArgb(140, 144, 152)))
+                    g.DrawString(esc, Font, hintBrush, Width - 32, y);
+                return;
+            }
 
             for (int i = 0; i < currentChoices.Length && x < Width - 40; i++)
 

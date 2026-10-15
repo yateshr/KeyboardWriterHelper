@@ -237,6 +237,24 @@ namespace KeyboardWriterHelper
 
             };
 
+            corrector.PredictionOffered += delegate(string pred, string pfx)
+            {
+                if (!settings.SmartCompose || !settings.ShowCandidatePopup) return;
+                ui.BeginInvoke((System.Windows.Forms.MethodInvoker)delegate
+                {
+                    IntPtr fg = Native.GetForegroundWindow();
+                    candidatePopup.ShowPrediction(pred, pfx, fg);
+                });
+            };
+
+            corrector.PredictionDismissed += delegate
+            {
+                ui.BeginInvoke((System.Windows.Forms.MethodInvoker)delegate
+                {
+                    candidatePopup.Dismiss();
+                });
+            };
+
             corrector.Learned += delegate(string word)
 
             {

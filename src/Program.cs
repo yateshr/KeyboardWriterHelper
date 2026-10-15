@@ -157,7 +157,7 @@ namespace KeyboardWriterHelper
 
             {
 
-                Engine = new Engine(speller.Check, Words.Contains,
+                Engine = new Engine((Func<string, string, string, bool, Suggestion>)speller.Check, Words.Contains,
 
                     delegate(string typed)
 
@@ -177,7 +177,9 @@ namespace KeyboardWriterHelper
 
                         Screen.Append(typed);
 
-                    });
+                    },
+
+                    speller.Ranker.PredictNext);
 
             }
 
@@ -185,13 +187,13 @@ namespace KeyboardWriterHelper
 
             // Types the text and returns what is on screen. {BS} stands for
 
-            // Backspace, {NEXT} for the next-suggestion shortcut.
+            // Backspace, {NEXT} for the next-suggestion shortcut, {TAB} for Tab / Smart Compose.
 
             public string Type(string text)
 
             {
 
-                foreach (char c in text.Replace("{BS}", "\b").Replace("{NEXT}", SelfTestForm.NextKey.ToString()))
+                foreach (char c in text.Replace("{BS}", "\b").Replace("{NEXT}", SelfTestForm.NextKey.ToString()).Replace("{TAB}", "\t"))
 
                 {
 
@@ -200,6 +202,14 @@ namespace KeyboardWriterHelper
                     {
 
                         if (!Engine.Backspace() && Screen.Length > 0) Screen.Length--;
+
+                    }
+
+                    else if (c == '\t')
+
+                    {
+
+                        if (!Engine.AcceptPrediction()) Screen.Append('\t');
 
                     }
 
@@ -341,7 +351,7 @@ namespace KeyboardWriterHelper
 
             bool punctuation = true, capitals = true, twoCapitals = true, phrases = true, doubleSpace, context = true;
 
-            bool smartDashes, smartArrows, smartEllipsis;
+            bool smartDashes, smartArrows, smartEllipsis, smartCompose = true;
 
     
 
@@ -367,7 +377,7 @@ namespace KeyboardWriterHelper
 
                     fixes.Clear();
 
-                    punctuation = capitals = twoCapitals = phrases = context = true;
+                    punctuation = capitals = twoCapitals = phrases = context = smartCompose = true;
 
                     doubleSpace = smartDashes = smartArrows = smartEllipsis = false;
 
@@ -396,6 +406,8 @@ namespace KeyboardWriterHelper
                 else if (name == "smartarrows") smartArrows = on;
 
                 else if (name == "smartellipsis") smartEllipsis = on;
+
+                else if (name == "smartcompose") smartCompose = on;
 
                 else return false;
 
@@ -432,6 +444,8 @@ namespace KeyboardWriterHelper
                 desk.Engine.SmartArrows = smartArrows;
 
                 desk.Engine.SmartEllipsis = smartEllipsis;
+
+                desk.Engine.SmartCompose = smartCompose;
 
                 return desk;
 
@@ -511,7 +525,7 @@ namespace KeyboardWriterHelper
 
                         string typed = line.Substring(1, arrow - 1);
 
-                        string expected = line.Substring(arrow + Arrow.Length, line.Length - arrow - Arrow.Length - 1);
+                        string expected = line.Substring(arrow + Arrow.Length, line.Length - arrow - Arrow.Length - 1).Replace("\\t", "\t");
 
                         string got = setup.NewDesk(speller).Type(typed);
 

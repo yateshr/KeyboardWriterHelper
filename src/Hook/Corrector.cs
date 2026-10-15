@@ -128,6 +128,10 @@ namespace KeyboardWriterHelper
 
         public event Action CandidateDismissed;
 
+        public event Action<string, string> PredictionOffered;
+
+        public event Action PredictionDismissed;
+
         public event Action EnabledChanged;
 
         // A word was added to "my words" because its fix was undone repeatedly.
@@ -174,7 +178,7 @@ namespace KeyboardWriterHelper
 
             this.testMarker = testMarker;
 
-            engine = new Engine(Lookup, myWords.Contains, myFixes.Get, Type);
+            engine = new Engine(Lookup, myWords.Contains, myFixes.Get, Type, spelling.PredictNext);
 
             engine.Corrected += OnCorrected;
 
@@ -185,6 +189,10 @@ namespace KeyboardWriterHelper
             engine.CandidateOffered += delegate(string fix, string[] choices) { if (CandidateOffered != null) CandidateOffered(fix, choices); };
 
             engine.CandidateDismissed += delegate { if (CandidateDismissed != null) CandidateDismissed(); };
+
+            engine.PredictionOffered += delegate(string pred, string pfx) { if (PredictionOffered != null) PredictionOffered(pred, pfx); };
+
+            engine.PredictionDismissed += delegate { if (PredictionDismissed != null) PredictionDismissed(); };
 
             keyProc = KeyProc;
 
@@ -234,7 +242,7 @@ namespace KeyboardWriterHelper
 
         {
 
-            Engine rehearsal = new Engine(Lookup, myWords.Contains, myFixes.Get, delegate { });
+            Engine rehearsal = new Engine(Lookup, myWords.Contains, myFixes.Get, delegate { }, spelling.PredictNext);
 
             foreach (char c in "Teh wrold ") rehearsal.Char(c);
 
@@ -302,7 +310,7 @@ namespace KeyboardWriterHelper
 
     
 
-        Suggestion Lookup(string word, string previous, bool cautious)
+        Suggestion Lookup(string word, string secondPrevious, string previous, bool cautious)
 
         {
 
@@ -310,7 +318,7 @@ namespace KeyboardWriterHelper
 
             bool tooSlow;
 
-            Suggestion result = spelling.Suggest(word, previous, cautious, LookupBudgetMs, out tooSlow);
+            Suggestion result = spelling.Suggest(word, secondPrevious, previous, cautious, LookupBudgetMs, out tooSlow);
 
             if (tooSlow) counters.TooSlow++;
 
@@ -674,6 +682,8 @@ namespace KeyboardWriterHelper
 
             engine.SmartEllipsis = settings.SmartEllipsis;
 
+            engine.SmartCompose = settings.SmartCompose;
+
     
 
             IntPtr foreground = Native.GetForegroundWindow();
@@ -742,11 +752,18 @@ namespace KeyboardWriterHelper
 
             if (vk == Native.VK_BACK) return engine.Backspace();
 
-            // Enter and Tab never trigger a correction: they submit forms, and the
+            // Enter never triggers a correction: it submits forms, and the
+            // word before could be a password or a command.
+            if (vk == Native.VK_RETURN) { engine.Break(true); return false; }
 
-            // word before them could be a password or a command.
-
-            if (vk == Native.VK_RETURN || vk == Native.VK_TAB) { engine.Break(true); return false; }
+            // Tab accepts Smart Compose predictive suggestions if available; otherwise breaks cleanly
+            if (vk == Native.VK_TAB)
+            {
+                if (settings.SmartCompose && engine.CanAcceptPrediction)
+                    return engine.AcceptPrediction();
+                engine.Break(true);
+                return false;
+            }
 
             if (vk == Native.VK_ESCAPE || (vk >= 0x21 && vk <= 0x28) || vk == 0x2D || vk == 0x2E || (vk >= 0x70 && vk <= 0x87))
 

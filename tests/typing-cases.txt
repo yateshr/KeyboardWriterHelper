@@ -205,3 +205,25 @@
 @ smartdashes on
 "word,-- next " => "word,— next "
 @ reset
+
+# ---- smart compose predictive next-word suggestions (Tab) ----
+"thank {TAB}" => "thank you "
+"united {TAB}" => "united states "
+"as w{TAB}" => "as well "
+"thank {TAB}{BS}" => "thank "
+@ smartcompose off
+"thank {TAB}" => "thank \t"
+@ reset
+
+# ---- sentence-aware offline grammatical agreement & phrase fixes ----
+"has went there " => "has gone there "
+"have saw them " => "have seen them "
+"had did that " => "had done that "
+"a apple on " => "an apple on "
+"an car was " => "a car was "
+"in the passed days " => "in the past days "
+"wether forecast today " => "weather forecast today "
+"bare with me please " => "bear with me please "
+"take for granite that " => "take for granted that "
+@ reset
+

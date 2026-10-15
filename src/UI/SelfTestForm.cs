@@ -71,7 +71,7 @@ namespace KeyboardWriterHelper
 
         {
 
-            this.script = script.Replace("{BS}", "\b").Replace("{NEXT}", NextKey.ToString());
+            this.script = script.Replace("{BS}", "\b").Replace("{NEXT}", NextKey.ToString()).Replace("{TAB}", "\t");
 
             Text = "Keyboard Writer Helper - self-test (closes by itself)";
 

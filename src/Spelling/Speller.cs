@@ -121,6 +121,16 @@ namespace KeyboardWriterHelper
 
         {
 
+            return Check(word, null, previous, cautious);
+
+        }
+
+
+
+        public Suggestion Check(string word, string secondPrevious, string previous, bool cautious)
+
+        {
+
             Suggestion result = new Suggestion();
 
             bool certain;
@@ -139,7 +149,7 @@ namespace KeyboardWriterHelper
 
             List<string> others = new List<string>();
 
-            string best = Ranker.Best(word, previous, windows, certain, cautious, Dictionary.IsCorrect, null, others);
+            string best = Ranker.Best(word, secondPrevious, previous, windows, certain, cautious, Dictionary.IsCorrect, null, others);
 
             if (best != null && best != word)
 
@@ -195,7 +205,7 @@ namespace KeyboardWriterHelper
 
         {
 
-            public string Word, Previous;
+            public string Word, SecondPrevious, Previous;
 
             public bool Cautious;
 
@@ -213,7 +223,7 @@ namespace KeyboardWriterHelper
 
             public string WordKey { get { return (Cautious ? "?" : "") + Word; } }
 
-            public string Key { get { return Previous == null ? WordKey : WordKey + " " + Previous; } }
+            public string Key { get { return Previous == null ? WordKey : WordKey + (SecondPrevious == null ? "" : " " + SecondPrevious) + " " + Previous; } }
 
         }
 
@@ -339,7 +349,7 @@ namespace KeyboardWriterHelper
 
                 Suggestion result = null;
 
-                try { result = speller.Check(request.Word, request.Previous, request.Cautious); }
+                try { result = speller.Check(request.Word, request.SecondPrevious, request.Previous, request.Cautious); }
 
                 catch (Exception ex) { counters.Error(ex); }
 
@@ -401,11 +411,21 @@ namespace KeyboardWriterHelper
 
         {
 
+            return Suggest(word, null, previous, cautious, budgetMs, out tooSlow);
+
+        }
+
+
+
+        public Suggestion Suggest(string word, string secondPrevious, string previous, bool cautious, int budgetMs, out bool tooSlow)
+
+        {
+
             tooSlow = false;
 
             string wordKey = (cautious ? "?" : "") + word;
 
-            string key = (!useContext || previous == null) ? wordKey : wordKey + " " + previous;
+            string key = (!useContext || previous == null) ? wordKey : wordKey + (secondPrevious == null ? "" : " " + secondPrevious) + " " + previous;
 
             lock (cache)
 
@@ -421,7 +441,7 @@ namespace KeyboardWriterHelper
 
     
 
-            Request request = new Request { Word = word, Previous = useContext ? previous : null, Cautious = cautious };
+            Request request = new Request { Word = word, SecondPrevious = useContext ? secondPrevious : null, Previous = useContext ? previous : null, Cautious = cautious };
 
             queue.Add(request);
 
@@ -442,6 +462,18 @@ namespace KeyboardWriterHelper
             tooSlow = true;
 
             return null;
+
+        }
+
+
+
+        public string PredictNext(string previous, string prefix)
+
+        {
+
+            Speller s = speller;
+
+            return s != null && s.Ranker != null ? s.Ranker.PredictNext(previous, prefix) : null;
 
         }
 

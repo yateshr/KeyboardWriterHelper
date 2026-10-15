@@ -261,6 +261,12 @@ namespace KeyboardWriterHelper
 
         readonly Dictionary<string, int> numberByWord = new Dictionary<string, int>(StringComparer.Ordinal);
 
+        readonly string[] wordByNumber;
+
+        readonly int[][] topFollowers;
+
+        readonly long[][] topFollowerCounts;
+
         readonly Dictionary<long, float> pairLogs = new Dictionary<long, float>();
 
         readonly double[] asFirst, asSecond;
@@ -329,9 +335,23 @@ namespace KeyboardWriterHelper
 
     
 
-            asFirst = new double[numberByWord.Count];
+            int totalWords = numberByWord.Count;
 
-            asSecond = new double[numberByWord.Count];
+            wordByNumber = new string[totalWords];
+
+            foreach (KeyValuePair<string, int> kv in numberByWord)
+
+                wordByNumber[kv.Value] = kv.Key;
+
+
+
+            topFollowers = new int[totalWords][];
+
+            topFollowerCounts = new long[totalWords][];
+
+            asFirst = new double[totalWords];
+
+            asSecond = new double[totalWords];
 
             using (StreamReader reader = Data.Open(PairResource))
 
@@ -367,9 +387,201 @@ namespace KeyboardWriterHelper
 
                     pairTotal += count;
 
+                    RecordTopFollower(first, second, count);
+
                 }
 
             }
+
+        }
+
+    
+
+        void RecordTopFollower(int first, int second, long count)
+
+        {
+
+            int[] f = topFollowers[first];
+
+            long[] c = topFollowerCounts[first];
+
+            if (f == null)
+
+            {
+
+                topFollowers[first] = new int[] { second };
+
+                topFollowerCounts[first] = new long[] { count };
+
+                return;
+
+            }
+
+            int len = f.Length;
+
+            if (len == 1)
+
+            {
+
+                if (count > c[0])
+
+                {
+
+                    topFollowers[first] = new int[] { second, f[0] };
+
+                    topFollowerCounts[first] = new long[] { count, c[0] };
+
+                }
+
+                else
+
+                {
+
+                    topFollowers[first] = new int[] { f[0], second };
+
+                    topFollowerCounts[first] = new long[] { c[0], count };
+
+                }
+
+                return;
+
+            }
+
+            if (len == 2)
+
+            {
+
+                if (count > c[0])
+
+                {
+
+                    topFollowers[first] = new int[] { second, f[0], f[1] };
+
+                    topFollowerCounts[first] = new long[] { count, c[0], c[1] };
+
+                }
+
+                else if (count > c[1])
+
+                {
+
+                    topFollowers[first] = new int[] { f[0], second, f[1] };
+
+                    topFollowerCounts[first] = new long[] { c[0], count, c[1] };
+
+                }
+
+                else
+
+                {
+
+                    topFollowers[first] = new int[] { f[0], f[1], second };
+
+                    topFollowerCounts[first] = new long[] { c[0], c[1], count };
+
+                }
+
+                return;
+
+            }
+
+            if (count > c[0])
+
+            {
+
+                f[2] = f[1]; c[2] = c[1];
+
+                f[1] = f[0]; c[1] = c[0];
+
+                f[0] = second; c[0] = count;
+
+            }
+
+            else if (count > c[1])
+
+            {
+
+                f[2] = f[1]; c[2] = c[1];
+
+                f[1] = second; c[1] = count;
+
+            }
+
+            else if (count > c[2])
+
+            {
+
+                f[2] = second; c[2] = count;
+
+            }
+
+        }
+
+    
+
+        public string PredictNext(string previous, string prefix)
+
+        {
+
+            string pfx = prefix == null ? "" : prefix.ToLowerInvariant();
+
+            if (!string.IsNullOrEmpty(previous))
+
+            {
+
+                int first;
+
+                if (numberByWord.TryGetValue(previous.ToLowerInvariant(), out first))
+
+                {
+
+                    int[] followers = topFollowers[first];
+
+                    if (followers != null)
+
+                    {
+
+                        for (int i = 0; i < followers.Length; i++)
+
+                        {
+
+                            string candidate = wordByNumber[followers[i]];
+
+                            if (string.IsNullOrEmpty(pfx)) return candidate;
+
+                            if (candidate.StartsWith(pfx, StringComparison.OrdinalIgnoreCase) &&
+
+                                candidate.Length > pfx.Length)
+
+                                return candidate;
+
+                        }
+
+                    }
+
+                }
+
+            }
+
+            if (pfx.Length >= 2)
+
+            {
+
+                for (int i = 0; i < words.Count && i < 2000; i++)
+
+                {
+
+                    string w = words[i];
+
+                    if (w.StartsWith(pfx, StringComparison.OrdinalIgnoreCase) && w.Length > pfx.Length)
+
+                        return w;
+
+                }
+
+            }
+
+            return null;
 
         }
 
@@ -383,29 +595,51 @@ namespace KeyboardWriterHelper
 
     
 
-        // By how many factors of ten the word before makes a candidate likelier
+        // By how many factors of ten the words before make a candidate likelier
 
-        // (or, below zero, less likely) than it is anyway: how often the two
+        // (or, below zero, less likely) than it is anyway: how often they
 
-        // stand together, against how often they would by chance. Being common
+        // stand together, against how often they would by chance.
 
-        // is already in the score, so "the" gains nothing from following everything.
+        double Context(string secondPrevious, string previous, string candidate)
 
-        // A pair missing from the list says nothing either way: "is improve" is
+        {
 
-        // rare, yet "improrvie" after "is" still means "improve".
+            if (!UseContext) return 0;
+
+            double score = 0;
+
+            if (previous != null) score += ContextPair(previous, candidate);
+
+            if (secondPrevious != null) score += 0.4 * ContextPair(secondPrevious, candidate);
+
+            return Math.Max(-MaxContext, Math.Min(MaxContext, score));
+
+        }
+
+    
 
         double Context(string previous, string candidate)
 
         {
 
-            if (previous == null || !UseContext) return 0;
+            return Context(null, previous, candidate);
+
+        }
+
+    
+
+        double ContextPair(string prev, string candidate)
+
+        {
+
+            if (prev == null) return 0;
 
             int space = candidate.IndexOf(' ');
 
             int first, second;
 
-            if (!numberByWord.TryGetValue(previous, out first) ||
+            if (!numberByWord.TryGetValue(prev, out first) ||
 
                 !numberByWord.TryGetValue(space > 0 ? candidate.Substring(0, space) : candidate, out second)) return 0;
 
@@ -440,6 +674,18 @@ namespace KeyboardWriterHelper
         // others, if given, receives the next-best candidates.
 
         public string Best(string typed, string previous, IList<string> windows, bool certain, bool cautious,
+
+            Func<string, bool> isCorrect, List<Scored> trace, List<string> others)
+
+        {
+
+            return Best(typed, null, previous, windows, certain, cautious, isCorrect, trace, others);
+
+        }
+
+
+
+        public string Best(string typed, string secondPrevious, string previous, IList<string> windows, bool certain, bool cautious,
 
             Func<string, bool> isCorrect, List<Scored> trace, List<string> others)
 
@@ -481,7 +727,7 @@ namespace KeyboardWriterHelper
 
                 all.Add(new Scored { Word = candidate, Cost = cost, Plain = score,
 
-                    Score = score + ContextWeight * Context(previous, candidateLower), FromWindows = true });
+                    Score = score + ContextWeight * Context(secondPrevious, previous, candidateLower), FromWindows = true });
 
             }
 
@@ -537,7 +783,7 @@ namespace KeyboardWriterHelper
 
                     double score = FrequencyWeight * logs[k] - EditWeight * cost;
 
-                    all.Add(new Scored { Word = word, Cost = cost, Plain = score, Score = score + ContextWeight * Context(previous, word) });
+                    all.Add(new Scored { Word = word, Cost = cost, Plain = score, Score = score + ContextWeight * Context(secondPrevious, previous, word) });
 
                 }
 

@@ -77,6 +77,10 @@ namespace KeyboardWriterHelper
 
         readonly Func<string, string, bool, Suggestion> suggest; // (word, word before in lower case, cautious)
 
+        readonly Func<string, string, string, bool, Suggestion> suggestWithContext; // (word, secondPrevious, previous, cautious)
+
+        readonly Func<string, string, string> predict; // (previous, prefix) -> predictedWord
+
         readonly Func<string, bool> isIgnored;
 
         // The user's own fix for a word or a two-word phrase, or null.
@@ -171,7 +175,37 @@ namespace KeyboardWriterHelper
 
         public volatile bool SmartEllipsis;
 
+        public volatile bool SmartCompose = true;
+
     
+
+        sealed class PredictionUndo
+
+        {
+
+            public string Prefix;
+
+            public string Prediction;
+
+            public string Remaining;
+
+        }
+
+
+
+        PredictionUndo predictionUndo;
+
+        string currentPrediction;
+
+        string currentPrefix;
+
+
+
+        public bool CanAcceptPrediction { get { return currentPrediction != null; } }
+
+        public string CurrentPrediction { get { return currentPrediction; } }
+
+
 
         // (typed, fix). A phrase fix reports both words.
 
@@ -187,11 +221,27 @@ namespace KeyboardWriterHelper
 
         public event Action CandidateDismissed;
 
+        public event Action<string, string> PredictionOffered;
+
+        public event Action PredictionDismissed;
+
     
 
         public Engine(Func<string, string, bool, Suggestion> suggest, Func<string, bool> isIgnored,
 
             Func<string, string> ownFix, Action<int, string> emit)
+
+            : this(suggest, isIgnored, ownFix, emit, null)
+
+        {
+
+        }
+
+
+
+        public Engine(Func<string, string, bool, Suggestion> suggest, Func<string, bool> isIgnored,
+
+            Func<string, string> ownFix, Action<int, string> emit, Func<string, string, string> predict)
 
         {
 
@@ -202,6 +252,104 @@ namespace KeyboardWriterHelper
             this.ownFix = ownFix;
 
             this.emit = emit;
+
+            this.predict = predict;
+
+        }
+
+
+
+        public Engine(Func<string, string, string, bool, Suggestion> suggestWithContext, Func<string, bool> isIgnored,
+
+            Func<string, string> ownFix, Action<int, string> emit, Func<string, string, string> predict)
+
+        {
+
+            this.suggestWithContext = suggestWithContext;
+
+            this.suggest = delegate(string w, string p, bool c) { return suggestWithContext(w, null, p, c); };
+
+            this.isIgnored = isIgnored;
+
+            this.ownFix = ownFix;
+
+            this.emit = emit;
+
+            this.predict = predict;
+
+        }
+
+
+
+        public bool AcceptPrediction()
+
+        {
+
+            if (currentPrediction == null) return false;
+
+            string pred = currentPrediction;
+
+            string pfx = currentPrefix ?? "";
+
+            currentPrediction = null;
+
+            currentPrefix = null;
+
+
+
+            string remaining = pred.Length >= pfx.Length ? pred.Substring(pfx.Length) : pred;
+
+            remaining += " ";
+
+
+
+            emit(0, remaining);
+
+
+
+            predictionUndo = new PredictionUndo { Prefix = pfx, Prediction = pred, Remaining = remaining };
+
+            undo = null;
+
+
+
+            thirdPrevious = secondPrevious;
+
+            secondPrevious = previous;
+
+            previous = pred;
+
+            Clear();
+
+            spaceAfterWord = true;
+
+            tainted = false;
+
+
+
+            if (PredictionDismissed != null) PredictionDismissed();
+
+            return true;
+
+        }
+
+
+
+        void DismissPrediction()
+
+        {
+
+            if (currentPrediction != null)
+
+            {
+
+                currentPrediction = null;
+
+                currentPrefix = null;
+
+                if (PredictionDismissed != null) PredictionDismissed();
+
+            }
 
         }
 
@@ -216,6 +364,10 @@ namespace KeyboardWriterHelper
             Clear();
 
             undo = null;
+
+            predictionUndo = null;
+
+            DismissPrediction();
 
             capNext = false;
 
@@ -255,6 +407,8 @@ namespace KeyboardWriterHelper
 
             undo = null;
 
+            predictionUndo = null;
+
             bool secondSpace = spaceAfterWord && c == ' ';
 
             spaceAfterWord = madeFullStop = false;
@@ -275,7 +429,7 @@ namespace KeyboardWriterHelper
 
                 // A letter right after punctuation: "example.com", "word,word". Not prose.
 
-                if (trail.Length > 0) { Clear(); tainted = true; return false; }
+                if (trail.Length > 0) { Clear(); tainted = true; DismissPrediction(); return false; }
 
                 if (word.Length == 0)
 
@@ -289,7 +443,29 @@ namespace KeyboardWriterHelper
 
                 word.Append(c);
 
-                if (word.Length > MaxWordLength) { Clear(); tainted = true; }
+                if (word.Length > MaxWordLength) { Clear(); tainted = true; DismissPrediction(); return false; }
+
+                if (SmartCompose && predict != null && !tainted && word.Length >= 1)
+                {
+                    string pfx = word.ToString();
+                    string pred = predict(previous == null ? null : previous.ToLowerInvariant(), pfx.ToLowerInvariant());
+                    if (!string.IsNullOrEmpty(pred) && !pred.Equals(pfx, StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (char.IsUpper(pfx[0]) && char.IsLower(pred[0]))
+                            pred = char.ToUpperInvariant(pred[0]) + pred.Substring(1);
+                        currentPrediction = pred;
+                        currentPrefix = pfx;
+                        if (PredictionOffered != null) PredictionOffered(currentPrediction, currentPrefix);
+                    }
+                    else
+                    {
+                        DismissPrediction();
+                    }
+                }
+                else
+                {
+                    DismissPrediction();
+                }
 
                 return false;
 
@@ -493,6 +669,27 @@ namespace KeyboardWriterHelper
 
                               (ending[ending.Length - 1] != '.' || !IsAbbreviation(last));
 
+                if (SmartCompose && predict != null && plain && previous != null)
+                {
+                    string pred = predict(previous.ToLowerInvariant(), "");
+                    if (!string.IsNullOrEmpty(pred))
+                    {
+                        if (capNext && char.IsLower(pred[0]))
+                            pred = char.ToUpperInvariant(pred[0]) + pred.Substring(1);
+                        currentPrediction = pred;
+                        currentPrefix = "";
+                        if (PredictionOffered != null) PredictionOffered(currentPrediction, currentPrefix);
+                    }
+                    else
+                    {
+                        DismissPrediction();
+                    }
+                }
+                else
+                {
+                    DismissPrediction();
+                }
+
                 return swallowed;
 
             }
@@ -506,6 +703,8 @@ namespace KeyboardWriterHelper
                 TryCorrect(c.ToString()))
 
             {
+
+                DismissPrediction();
 
                 if (IsSentenceEnd(c)) afterSentenceEnd = true;
 
@@ -533,6 +732,8 @@ namespace KeyboardWriterHelper
 
             {
 
+                DismissPrediction();
+
                 trail.Append(c);
 
                 if (IsSentenceEnd(c)) afterSentenceEnd = true;
@@ -544,6 +745,8 @@ namespace KeyboardWriterHelper
     
 
             thirdPrevious = secondPrevious = previous = null;
+
+            DismissPrediction();
 
             if (!tainted && word.Length == 0 && IsOpener(c)) return false;
 
@@ -597,9 +800,43 @@ namespace KeyboardWriterHelper
 
         {
 
+            if (predictionUndo != null)
+            {
+                PredictionUndo pu = predictionUndo;
+                predictionUndo = null;
+                DismissPrediction();
+
+                emit(pu.Remaining.Length, "");
+                word.Length = 0;
+                word.Append(pu.Prefix);
+                trail.Length = 0;
+                previous = secondPrevious;
+                secondPrevious = thirdPrevious;
+                thirdPrevious = null;
+                spaceAfterWord = false;
+                tainted = false;
+
+                if (SmartCompose && predict != null && word.Length >= 1)
+                {
+                    string pfx = word.ToString();
+                    string pred = predict(previous == null ? null : previous.ToLowerInvariant(), pfx.ToLowerInvariant());
+                    if (!string.IsNullOrEmpty(pred) && !pred.Equals(pfx, StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (char.IsUpper(pfx[0]) && char.IsLower(pred[0]))
+                            pred = char.ToUpperInvariant(pred[0]) + pred.Substring(1);
+                        currentPrediction = pred;
+                        currentPrefix = pfx;
+                        if (PredictionOffered != null) PredictionOffered(currentPrediction, currentPrefix);
+                    }
+                }
+                return true;
+            }
+
             bool fullStop = madeFullStop;
 
             spaceAfterWord = madeFullStop = false;
+
+            DismissPrediction();
 
             if (fullStop)
 
@@ -661,7 +898,23 @@ namespace KeyboardWriterHelper
 
             if (trail.Length > 0) trail.Length--;
 
-            else if (word.Length > 0) word.Length--;
+            else if (word.Length > 0)
+            {
+                word.Length--;
+                if (SmartCompose && predict != null && !tainted && word.Length >= 1)
+                {
+                    string pfx = word.ToString();
+                    string pred = predict(previous == null ? null : previous.ToLowerInvariant(), pfx.ToLowerInvariant());
+                    if (!string.IsNullOrEmpty(pred) && !pred.Equals(pfx, StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (char.IsUpper(pfx[0]) && char.IsLower(pred[0]))
+                            pred = char.ToUpperInvariant(pred[0]) + pred.Substring(1);
+                        currentPrediction = pred;
+                        currentPrefix = pfx;
+                        if (PredictionOffered != null) PredictionOffered(currentPrediction, currentPrefix);
+                    }
+                }
+            }
 
             else
 
@@ -1107,9 +1360,18 @@ namespace KeyboardWriterHelper
 
             {
 
-                Suggestion s = suggest(w, previous == null ? null : previous.ToLowerInvariant(),
-
-                    capitalised || w.Length <= Ranker.ShortWord);
+                Suggestion s;
+                if (suggestWithContext != null)
+                {
+                    s = suggestWithContext(w, secondPrevious == null ? null : secondPrevious.ToLowerInvariant(),
+                        previous == null ? null : previous.ToLowerInvariant(),
+                        capitalised || w.Length <= Ranker.ShortWord);
+                }
+                else
+                {
+                    s = suggest(w, previous == null ? null : previous.ToLowerInvariant(),
+                        capitalised || w.Length <= Ranker.ShortWord);
+                }
 
                 if (s == null) return null;
 

@@ -407,6 +407,10 @@ namespace KeyboardWriterHelper
 
                 o.ShowCandidatePopup, delegate(bool v) { o.ShowCandidatePopup = v; o.Save(); }));
 
+            flow.Controls.Add(Check("Smart Compose: predictive next-word suggestions (press Tab to accept)",
+
+                o.SmartCompose, delegate(bool v) { o.SmartCompose = v; o.Save(); }));
+
             Label note = Note(
 
                 "Backspace right after a fix undoes it. Undo the same fix twice and the word is added to My words.\r\n\r\n" +

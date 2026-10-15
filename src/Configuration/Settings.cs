@@ -161,7 +161,7 @@ namespace KeyboardWriterHelper
 
                              RememberTypos, SmartDashes, SmartArrows, SmartEllipsis,
 
-                             SkipFullscreenGames = true, ShowCandidatePopup = true;
+                             SkipFullscreenGames = true, ShowCandidatePopup = true, SmartCompose = true;
 
         public volatile Hotkey PauseHotkey = Hotkey.Parse("Ctrl+Alt+K"), NextHotkey = Hotkey.Parse("Ctrl+Alt+N");
 
@@ -224,6 +224,8 @@ namespace KeyboardWriterHelper
                     else if (key == "skipFullscreenGames") SkipFullscreenGames = value;
 
                     else if (key == "showCandidatePopup") ShowCandidatePopup = value;
+
+                    else if (key == "smartCompose") SmartCompose = value;
 
                     else if (key == "mainLanguage") MainLanguage = text;
 
@@ -366,6 +368,8 @@ namespace KeyboardWriterHelper
                     "skipFullscreenGames=" + Text(SkipFullscreenGames) +
 
                     "showCandidatePopup=" + Text(ShowCandidatePopup) +
+
+                    "smartCompose=" + Text(SmartCompose) +
 
                     "mainLanguage=" + MainLanguage + "\r\n" +
 
