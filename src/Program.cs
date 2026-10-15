@@ -44,6 +44,7 @@ namespace KeyboardWriterHelper
             if (args.Length >= 2 && args[0] == "--eval") return Eval(args);
             if (args.Length >= 2 && args[0] == "--eval-ok") return EvalOk(args);
             if (args.Length >= 2 && args[0] == "--selftest") return SelfTest(args);
+            if (args.Length == 1 && args[0] == "--lint") return Lint();
 
             bool first;
             using (Mutex single = new Mutex(true, "KeyboardWriterHelper.SingleInstance", out first))
@@ -326,6 +327,7 @@ namespace KeyboardWriterHelper
                 if (args[i] == "--misses") { misses = true; continue; }
                 if (args[i] == "--caps") { caps = true; continue; }
                 if (args[i] == "--before" && i + 1 < args.Length) { before = args[++i]; continue; }
+                if (args[i].StartsWith("--min-") || args[i].StartsWith("--max-")) { i++; continue; }
                 foreach (string line in File.ReadAllLines(args[i]))
                 {
                     int colon = line.IndexOf(':');
@@ -338,10 +340,11 @@ namespace KeyboardWriterHelper
             return cases;
         }
 
-        // --eval [--misses] [--before word] file...: how many misspellings come out
-        // right. Lines are "intended: typed typed ..."; alternatives for intended
-        // are separated by |. --before types each one after that word, to see
-        // what the word before does to the answers.
+        // --eval [--misses] [--before word] [--min-right %] [--max-wrong %] file...:
+        // how many misspellings come out right. Lines are "intended: typed typed
+        // ..."; alternatives for intended are separated by |. --before types each
+        // one after that word, to see what the word before does to the answers.
+        // Exit code 1 when a --min-/--max- limit is not met.
         static int Eval(string[] args)
         {
             bool misses, caps;
@@ -368,12 +371,15 @@ namespace KeyboardWriterHelper
             o.WriteLine("Windows' first suggestion right: " + Percent(windowsFirst, cases.Count));
             o.WriteLine("this app: right " + Percent(right, cases.Count) + ", changed to a wrong word " + Percent(wrong, cases.Count) +
                 ", left alone " + Percent(cases.Count - right - wrong, cases.Count));
-            return 0;
+            bool ok = Within(o, "right", right, cases.Count, Limit(args, "--min-right"), true) &
+                      Within(o, "changed to a wrong word", wrong, cases.Count, Limit(args, "--max-wrong"), false);
+            return ok ? 0 : 1;
         }
 
-        // --eval-ok [--misses] [--caps] [--before word] file...: how many CORRECT
-        // words are left alone. Lines are "category: word word ...". --caps types
-        // each word with a capital, as at the start of a sentence.
+        // --eval-ok [--misses] [--caps] [--before word] [--max-changed %] file...:
+        // how many CORRECT words are left alone. Lines are "category: word word
+        // ...". --caps types each word with a capital, as at the start of a
+        // sentence. Exit code 1 when more than --max-changed are changed.
         static int EvalOk(string[] args)
         {
             bool misses, caps;
@@ -408,7 +414,74 @@ namespace KeyboardWriterHelper
                 o.WriteLine(category.PadRight(14) + " changed " + Percent(n[1], n[0]) + ", only re-capitalised " + n[2]);
             }
             o.WriteLine("ALL".PadRight(14) + " changed " + Percent(all[1], all[0]) + ", only re-capitalised " + all[2]);
-            return 0;
+            return Within(o, "correct words changed", all[1], all[0], Limit(args, "--max-changed"), false) ? 0 : 1;
+        }
+
+        // The percentage after a flag such as "--min-right 95", or NaN if not given.
+        static double Limit(string[] args, string flag)
+        {
+            double value;
+            for (int i = 1; i + 1 < args.Length; i++)
+                if (args[i] == flag && double.TryParse(args[i + 1], NumberStyles.Float, CultureInfo.InvariantCulture, out value))
+                    return value;
+            return double.NaN;
+        }
+
+        // Is part/whole on the right side of the limit (a percentage)? Says so if not.
+        static bool Within(TextWriter o, string what, int part, int whole, double limit, bool atLeast)
+        {
+            if (double.IsNaN(limit) || whole == 0) return true;
+            double share = 100.0 * part / whole;
+            if (atLeast ? share >= limit : share <= limit) return true;
+            o.WriteLine("FAILED: " + what + " is " + share.ToString("0.0", CultureInfo.InvariantCulture) + "%, " +
+                (atLeast ? "below" : "above") + " the limit of " + limit.ToString("0.0", CultureInfo.InvariantCulture) + "%");
+            return false;
+        }
+
+        // --lint: checks the built-in lists for entries that are listed twice or
+        // contradict each other. Exit code 1 when there are any.
+        static int Lint()
+        {
+            TextWriter o = Out();
+            int problems = 0;
+            foreach (string name in new string[] { "fixes.txt", "phrase-fixes.txt" })
+            {
+                HashSet<string> keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (string line in Data.Lines(name))
+                {
+                    int eq = line.IndexOf('=');
+                    if (eq <= 0 || eq == line.Length - 1)
+                    {
+                        o.WriteLine(name + ": cannot read \"" + line + "\"");
+                        problems++;
+                    }
+                    else if (!keys.Add(line.Substring(0, eq).Trim()))
+                    {
+                        o.WriteLine(name + ": \"" + line.Substring(0, eq).Trim() + "\" is listed twice");
+                        problems++;
+                    }
+                }
+            }
+            foreach (string name in new string[] { "never-correct.txt", "other-language.txt", "abbreviations.txt" })
+            {
+                HashSet<string> words = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (string line in Data.Lines(name))
+                    foreach (string word in line.Split(new char[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries))
+                        if (!words.Add(word))
+                        {
+                            o.WriteLine(name + ": \"" + word + "\" is listed twice");
+                            problems++;
+                        }
+            }
+            HashSet<string> never = Data.Words("never-correct.txt");
+            foreach (KeyValuePair<string, string> fix in Data.Pairs("fixes.txt"))
+                if (never.Contains(fix.Key))
+                {
+                    o.WriteLine("\"" + fix.Key + "\" is in both fixes.txt and never-correct.txt");
+                    problems++;
+                }
+            o.WriteLine("built-in lists: " + (problems == 0 ? "ok" : problems + " problem(s)"));
+            return problems == 0 ? 0 : 1;
         }
 
         static bool Among(string word, string[] choices)
