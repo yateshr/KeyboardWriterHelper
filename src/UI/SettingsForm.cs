@@ -210,9 +210,9 @@ namespace KeyboardWriterHelper
                 o.SmartDashes, delegate(bool v) { o.SmartDashes = o.SmartArrows = o.SmartEllipsis = v; o.Save(); }));
             flow.Controls.Add(Check("Skip correction in fullscreen games and exclusive-mode programs",
                 o.SkipFullscreenGames, delegate(bool v) { o.SkipFullscreenGames = v; o.Save(); }));
-            flow.Controls.Add(Check("Show floating candidate pill when cycling suggestions",
+            flow.Controls.Add(Check("Show the floating pill with the other suggestions (and Smart Compose's guess)",
                 o.ShowCandidatePopup, delegate(bool v) { o.ShowCandidatePopup = v; o.Save(); }));
-            flow.Controls.Add(Check("Smart Compose: predictive next-word suggestions (press Tab to accept)",
+            flow.Controls.Add(Check("Smart Compose: guess the next word from the words before (Tab accepts it while shown)",
                 o.SmartCompose, delegate(bool v) { o.SmartCompose = v; o.Save(); }));
             Label note = Note(
                 "Backspace right after a fix undoes it. Undo the same fix twice and the word is added to My words.\r\n\r\n" +

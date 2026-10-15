@@ -274,3 +274,11 @@
 "was suppose to " => "was supposed to "
 "Londn is " => "London is "
 @ reset
+
+# ---- Smart Compose needs the words before: Tab after the first word in a box
+# belongs to the program ("Name" + Tab moves to the next field) ----
+"Name{TAB}" => "Name	"
+"John{TAB}" => "John	"
+"cons{TAB}" => "cons	"
+"the {TAB}" => "the 	"
+@ reset

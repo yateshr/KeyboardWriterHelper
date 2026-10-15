@@ -453,66 +453,58 @@ namespace KeyboardWriterHelper
             return PredictNext(null, previous, prefix);
         }
 
+        // A guess for a word not started yet must be at least this share of what
+        // follows the words before; below it the pill would flash after every word.
+        const double MinNextShare = 0.05;
+
+        // The likely next word, or the likely end of the word being typed (prefix).
+        // Only from the words before: with nothing to go on there is no guess, as
+        // the first word in a box is where Tab most often means "next field"
+        // ("Name" + Tab must not become "Names ").
         public string PredictNext(string secondPrevious, string previous, string prefix)
         {
+            if (string.IsNullOrEmpty(previous)) return null;
             string pfx = prefix == null ? "" : prefix.ToLowerInvariant();
+            int second;
+            if (!numberByWord.TryGetValue(previous.ToLowerInvariant(), out second)) return null;
 
-            // 1. Check trigram next-word match if both secondPrevious and previous are present
-            if (!string.IsNullOrEmpty(secondPrevious) && !string.IsNullOrEmpty(previous))
+            // 1. The two words before.
+            int first;
+            int[] followers;
+            if (!string.IsNullOrEmpty(secondPrevious) && numberByWord.TryGetValue(secondPrevious.ToLowerInvariant(), out first) &&
+                topTrigramFollowers.TryGetValue(TrigramPrefixKey(first, second), out followers))
             {
-                int first, second;
-                if (numberByWord.TryGetValue(secondPrevious.ToLowerInvariant(), out first) &&
-                    numberByWord.TryGetValue(previous.ToLowerInvariant(), out second))
+                float[] logs3 = topTrigramCounts[TrigramPrefixKey(first, second)];
+                float pairLog;
+                bool knownPair = pairLogs.TryGetValue(PairKey(first, second), out pairLog);
+                for (int i = 0; i < followers.Length; i++)
                 {
-                    long triKey = TrigramPrefixKey(first, second);
-                    int[] followers;
-                    if (topTrigramFollowers.TryGetValue(triKey, out followers) && followers != null)
-                    {
-                        for (int i = 0; i < followers.Length; i++)
-                        {
-                            string candidate = wordByNumber[followers[i]];
-                            if (string.IsNullOrEmpty(pfx)) return candidate;
-                            if (candidate.StartsWith(pfx, StringComparison.OrdinalIgnoreCase) &&
-                                candidate.Length > pfx.Length)
-                                return candidate;
-                        }
-                    }
+                    string candidate = wordByNumber[followers[i]];
+                    if (!Completes(candidate, pfx)) continue;
+                    if (pfx.Length > 0 || (knownPair && Math.Pow(10, logs3[i] - pairLog) >= MinNextShare)) return candidate;
+                    break;
                 }
             }
 
-            // 2. Check bigram follower match if previous is present
-            if (!string.IsNullOrEmpty(previous))
+            // 2. The word before.
+            followers = topFollowers[second];
+            if (followers != null)
             {
-                int first;
-                if (numberByWord.TryGetValue(previous.ToLowerInvariant(), out first))
+                long[] counts = topFollowerCounts[second];
+                for (int i = 0; i < followers.Length; i++)
                 {
-                    int[] followers = topFollowers[first];
-                    if (followers != null)
-                    {
-                        for (int i = 0; i < followers.Length; i++)
-                        {
-                            string candidate = wordByNumber[followers[i]];
-                            if (string.IsNullOrEmpty(pfx)) return candidate;
-                            if (candidate.StartsWith(pfx, StringComparison.OrdinalIgnoreCase) &&
-                                candidate.Length > pfx.Length)
-                                return candidate;
-                        }
-                    }
+                    string candidate = wordByNumber[followers[i]];
+                    if (!Completes(candidate, pfx)) continue;
+                    if (pfx.Length > 0 || counts[i] >= MinNextShare * asFirst[second]) return candidate;
+                    break;
                 }
             }
-
-            // 3. Fallback to common vocabulary prefix match
-            if (pfx.Length >= 2)
-            {
-                for (int i = 0; i < words.Count && i < 2000; i++)
-                {
-                    string w = words[i];
-                    if (w.StartsWith(pfx, StringComparison.OrdinalIgnoreCase) && w.Length > pfx.Length)
-                        return w;
-                }
-            }
-
             return null;
+        }
+
+        static bool Completes(string candidate, string prefix)
+        {
+            return prefix.Length == 0 || (candidate.Length > prefix.Length && candidate.StartsWith(prefix, StringComparison.Ordinal));
         }
 
         // Multiplied, not shifted: a long's hash is its two halves xor-ed, which

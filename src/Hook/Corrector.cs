@@ -390,10 +390,11 @@ namespace KeyboardWriterHelper
             // word before could be a password or a command.
             if (vk == Native.VK_RETURN) { engine.Break(true); return false; }
 
-            // Tab accepts Smart Compose predictive suggestions if available; otherwise breaks cleanly
+            // Tab accepts a Smart Compose suggestion, but only one the user can see
+            // in the pill; at any other moment Tab belongs to the program.
             if (vk == Native.VK_TAB)
             {
-                if (settings.SmartCompose && engine.CanAcceptPrediction)
+                if (settings.SmartCompose && settings.ShowCandidatePopup && engine.CanAcceptPrediction)
                     return engine.AcceptPrediction();
                 engine.Break(true);
                 return false;

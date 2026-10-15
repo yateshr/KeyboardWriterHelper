@@ -89,7 +89,7 @@ namespace KeyboardWriterHelper
         public volatile bool FixOnPunctuation = true, CapitalizeSentences = true, FixTwoCapitals = true,
                              FixPhrases = true, DoubleSpacePeriod, UseContext = true, AcceptVariants = true,
                              RememberTypos, SmartDashes, SmartArrows, SmartEllipsis,
-                             SkipFullscreenGames = true, ShowCandidatePopup = true, SmartCompose = true;
+                             SkipFullscreenGames = true, ShowCandidatePopup = true, SmartCompose;
         public volatile Hotkey PauseHotkey = Hotkey.Parse("Ctrl+Alt+K"), NextHotkey = Hotkey.Parse("Ctrl+Alt+N");
         // The English spelling that supplies the suggestions ("" = the first one installed).
         public volatile string MainLanguage = "";
