@@ -243,7 +243,7 @@
 "They does " => "They do "
 "could went " => "could go "
 "Could went " => "Could go "
-"should saw " => "should see "
+"should knew " => "should know "
 "would took " => "would take "
 "did went " => "did go "
 "could not went " => "could not go "
@@ -258,6 +258,53 @@
 "much items " => "many items "
 "much people " => "many people "
 "each persons " => "each person "
-"these kind " => "this kind "
+"these kind of " => "this kind of "
 "could went {BS}" => "could went"
+@ reset
+
+# ---- grammar fixes that need the right context (see must-not-change.txt) ----
+"He have a car. " => "He has a car. "
+"and it have " => "and it has "
+"we was " => "we were "
+"they is " => "they are "
+"a unusual " => "an unusual "
+"a ugly " => "an ugly "
+"an unit " => "a unit "
+"your going to " => "you're going to "
+"was suppose to " => "was supposed to "
+"Londn is " => "London is "
+@ reset
+
+# ---- Smart Compose needs the words before: Tab after the first word in a box
+# belongs to the program ("Name" + Tab moves to the next field) ----
+"Name{TAB}" => "Name	"
+"John{TAB}" => "John	"
+"cons{TAB}" => "cons	"
+"the {TAB}" => "the 	"
+@ reset
+
+# ---- snippets in My fixes: --cases uses a fixed clock (2026-01-02 03:04) and
+# the clipboard "line one", line break, "line two", tab, "tab" ----
+@ fix today={date}
+@ fix now={time}
+@ fix stamp={datetime}
+@ fix myclip={clip}
+@ fix cc=:clip:
+"today " => "2026-01-02 "
+"now " => "03:04 "
+"stamp " => "2026-01-02 03:04 "
+"myclip " => "line one line two tab "
+"cc " => "line one line two tab "
+@ reset
+
+# ---- smart typography, each kind ----
+@ smartdashes on
+@ smartellipsis on
+@ smartarrows on
+"a --- b " => "a — b "
+"wait... then " => "wait… Then "
+"a -> b " => "a → b "
+"x => y " => "x ⇒ y "
+"a <- b " => "a ← b "
+"a -- {BS}" => "a --"
 @ reset
