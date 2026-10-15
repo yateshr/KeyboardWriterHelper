@@ -85,6 +85,10 @@ namespace KeyboardWriterHelper
 
             Size = new Size(320, 36);
 
+            AccessibleName = "Word Suggestions";
+
+            AccessibleRole = AccessibleRole.ToolTip;
+
     
 
             hideTimer.Interval = 2500;
@@ -104,6 +108,8 @@ namespace KeyboardWriterHelper
             currentFix = fix;
 
             currentChoices = choices;
+
+            AccessibleDescription = string.Join(", ", choices);
 
             hideTimer.Stop();
 
@@ -137,17 +143,55 @@ namespace KeyboardWriterHelper
 
     
 
-            Screen scr = Screen.FromHandle(foreground != IntPtr.Zero ? foreground : Handle);
+            Point target = Point.Empty;
 
-            Native.RECT rect;
+            bool foundCaret = false;
 
-            if (foreground != IntPtr.Zero && Native.GetWindowRect(foreground, out rect) && rect.Right > rect.Left && rect.Bottom > rect.Top)
+            if (foreground != IntPtr.Zero)
 
             {
 
-                int left = Math.Max(scr.WorkingArea.Left + 10, Math.Min(rect.Right - Width - 20, scr.WorkingArea.Right - Width - 10));
+                uint tid = Native.GetWindowThreadProcessId(foreground, IntPtr.Zero);
 
-                int top = Math.Max(scr.WorkingArea.Top + 10, Math.Min(rect.Bottom - Height - 20, scr.WorkingArea.Bottom - Height - 10));
+                Native.GUITHREADINFO gui = new Native.GUITHREADINFO();
+
+                gui.cbSize = Marshal.SizeOf(typeof(Native.GUITHREADINFO));
+
+                if (Native.GetGUIThreadInfo(tid, ref gui) && gui.hwndCaret != IntPtr.Zero && gui.rcCaret.Right > gui.rcCaret.Left)
+
+                {
+
+                    Native.POINT pt = new Native.POINT { X = gui.rcCaret.Left, Y = gui.rcCaret.Bottom + 4 };
+
+                    if (Native.ClientToScreen(gui.hwndCaret, ref pt))
+
+                    {
+
+                        target = new Point(pt.X, pt.Y);
+
+                        foundCaret = true;
+
+                    }
+
+                }
+
+            }
+
+    
+
+            Screen scr = Screen.FromPoint(foundCaret ? target : (foreground != IntPtr.Zero ? Screen.FromHandle(foreground).WorkingArea.Location : Cursor.Position));
+
+            if (foundCaret)
+
+            {
+
+                int left = Math.Max(scr.WorkingArea.Left + 5, Math.Min(target.X, scr.WorkingArea.Right - Width - 5));
+
+                int top = target.Y;
+
+                if (top + Height > scr.WorkingArea.Bottom)
+
+                    top = Math.Max(scr.WorkingArea.Top + 5, target.Y - Height - 24);
 
                 Location = new Point(left, top);
 
@@ -157,7 +201,27 @@ namespace KeyboardWriterHelper
 
             {
 
-                Location = new Point(scr.WorkingArea.Right - Width - 20, scr.WorkingArea.Bottom - Height - 20);
+                Native.RECT rect;
+
+                if (foreground != IntPtr.Zero && Native.GetWindowRect(foreground, out rect) && rect.Right > rect.Left && rect.Bottom > rect.Top)
+
+                {
+
+                    int left = Math.Max(scr.WorkingArea.Left + 10, Math.Min(rect.Right - Width - 20, scr.WorkingArea.Right - Width - 10));
+
+                    int top = Math.Max(scr.WorkingArea.Top + 10, Math.Min(rect.Bottom - Height - 20, scr.WorkingArea.Bottom - Height - 10));
+
+                    Location = new Point(left, top);
+
+                }
+
+                else
+
+                {
+
+                    Location = new Point(scr.WorkingArea.Right - Width - 20, scr.WorkingArea.Bottom - Height - 20);
+
+                }
 
             }
 
@@ -263,7 +327,7 @@ namespace KeyboardWriterHelper
 
             string hint = "⌫";
 
-            using (SolidBrush hintBrush = new SolidBrush(Color.FromArgb(120, 124, 132)))
+            using (SolidBrush hintBrush = new SolidBrush(Color.FromArgb(180, 184, 192)))
 
                 g.DrawString(hint, Font, hintBrush, Width - 22, y);
 

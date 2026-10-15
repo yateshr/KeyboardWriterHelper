@@ -85,7 +85,7 @@ namespace KeyboardWriterHelper
 
             tabs.TabPages.Add(ListTab("My words", wordsList,
 
-                "Words listed here are never auto-corrected.", "Add word", AddWord, RemoveWord, null));
+                "Words listed here are never auto-corrected.", "&Add word", AddWord, RemoveWord, null));
 
             tabs.TabPages.Add(ListTab("My fixes", fixesList,
 
@@ -93,13 +93,13 @@ namespace KeyboardWriterHelper
 
                 "Supports {date}, {time}, {datetime}, {clip} (e.g. now={time}, today={date}, myclip={clip}).",
 
-                "Add fix", AddFix, RemoveFix, null));
+                "&Add fix", AddFix, RemoveFix, null));
 
             tabs.TabPages.Add(ListTab("Programs", appsList,
 
                 "Nothing typed in these programs is corrected. The tray icon turns amber while one of them is in front.",
 
-                "Add program", AddProgram, RemoveProgram, "Add the program in front (now)"));
+                "&Add program", AddProgram, RemoveProgram, "Add the program in front (now)"));
 
             tabs.TabPages.Add(TyposTab());
 
@@ -467,15 +467,21 @@ namespace KeyboardWriterHelper
 
             list.SelectionMode = SelectionMode.MultiExtended;
 
+            list.TabIndex = 0;
+
             TextBox input = new TextBox();
 
             input.SetBounds(Left0, 324, Wide - 190, 24);
+
+            input.TabIndex = 1;
 
             Button addButton = new Button();
 
             addButton.Text = addLabel;
 
             addButton.SetBounds(Left0 + Wide - 184, 322, 100, 27);
+
+            addButton.TabIndex = 2;
 
             Action doAdd = delegate
 
@@ -507,9 +513,11 @@ namespace KeyboardWriterHelper
 
             Button removeButton = new Button();
 
-            removeButton.Text = "Remove";
+            removeButton.Text = "&Remove";
 
             removeButton.SetBounds(Left0 + Wide - 78, 322, 78, 27);
+
+            removeButton.TabIndex = 3;
 
             removeButton.Click += delegate
 
@@ -579,7 +587,7 @@ namespace KeyboardWriterHelper
 
             Button always = new Button();
 
-            always.Text = "Always fix it this way";
+            always.Text = "&Always fix it this way";
 
             always.SetBounds(Left0, 290, 170, 27);
 
@@ -599,7 +607,7 @@ namespace KeyboardWriterHelper
 
             Button never = new Button();
 
-            never.Text = "Never correct it";
+            never.Text = "&Never correct it";
 
             never.SetBounds(Left0 + 178, 290, 140, 27);
 
@@ -819,19 +827,49 @@ namespace KeyboardWriterHelper
 
     
 
+        static bool SequenceEquals(string[] a, string[] b)
+
+        {
+
+            if (ReferenceEquals(a, b)) return true;
+
+            if (a == null || b == null || a.Length != b.Length) return false;
+
+            for (int i = 0; i < a.Length; i++)
+
+                if (!string.Equals(a[i], b[i], StringComparison.Ordinal)) return false;
+
+            return true;
+
+        }
+
+    
+
         static void Fill(ListBox list, ref string[] shown, string[] now)
 
         {
 
-            if (string.Join("\n", shown) == string.Join("\n", now)) return;
+            if (SequenceEquals(shown, now)) return;
 
             shown = now;
+
+            object prevSelected = list.SelectedItem;
 
             list.BeginUpdate();
 
             list.Items.Clear();
 
             list.Items.AddRange(now);
+
+            if (prevSelected != null)
+
+            {
+
+                int idx = list.Items.IndexOf(prevSelected);
+
+                if (idx >= 0) list.SelectedIndex = idx;
+
+            }
 
             list.EndUpdate();
 

@@ -187,3 +187,21 @@
 @ fix myip=127.0.0.1
 "myip " => "127.0.0.1 "
 @ reset
+
+# ---- expanded homophone phrase fixes ----
+"there going to " => "they're going to "
+"its ok to " => "it's ok to "
+"your welcome to " => "you're welcome to "
+"more then that " => "more than that "
+"lose knot on " => "loose knot on "
+@ reset
+
+# ---- abbreviation sentence boundaries ----
+"Dr. smith " => "Dr. smith "
+"etc. more " => "etc. more "
+@ reset
+
+# ---- smart typography boundary behaviors ----
+@ smartdashes on
+"word,-- next " => "word,— next "
+@ reset

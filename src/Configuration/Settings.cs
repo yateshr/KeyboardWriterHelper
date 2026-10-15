@@ -779,13 +779,41 @@ namespace KeyboardWriterHelper
 
                 else counts.Remove(key);
 
-                // Keep the file small: one-off slips go first.
+                // Keep memory and disk bounded: prune single-use slips first, then lowest counts.
 
                 if (counts.Count > MaxEntries)
 
-                    foreach (string once in new List<string>(counts.Keys))
+                {
 
-                        if (counts[once] == 1) counts.Remove(once);
+                    List<string> toRemove = new List<string>();
+
+                    foreach (KeyValuePair<string, int> pair in counts)
+
+                        if (pair.Value == 1) toRemove.Add(pair.Key);
+
+                    foreach (string k in toRemove) counts.Remove(k);
+
+    
+
+                    if (counts.Count > MaxEntries)
+
+                    {
+
+                        List<KeyValuePair<string, int>> pairs = new List<KeyValuePair<string, int>>(counts);
+
+                        pairs.Sort(delegate(KeyValuePair<string, int> a, KeyValuePair<string, int> b) { return a.Value.CompareTo(b.Value); });
+
+                        int targetCount = MaxEntries * 3 / 4;
+
+                        int removeN = counts.Count - targetCount;
+
+                        for (int i = 0; i < removeN && i < pairs.Count; i++)
+
+                            counts.Remove(pairs[i].Key);
+
+                    }
+
+                }
 
                 unsaved = true;
 

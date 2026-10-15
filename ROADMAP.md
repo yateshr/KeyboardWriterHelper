@@ -131,14 +131,16 @@
 - **Impact**: If the app is killed or encounters an error, the icon remains in the notification area as a "ghost" until moused over, and GDI handle quotas leak during reloads.
 - **Fix**: P/Invoke `DestroyIcon` after cloning managed icon in `MakeIcon`, and attach cleanup routines to `Application.ApplicationExit`, `AppDomain.CurrentDomain.UnhandledException`, and `AppDomain.CurrentDomain.ProcessExit`.
 
-### [HIGH-08] SettingsForm Timer Wipes User Selection & Overwrites Disk Edits
+### [HIGH-08] SettingsForm Timer Wipes User Selection & Overwrites Disk Edits [RESOLVED]
 - **Location**: `src/UI/SettingsForm.cs:822-838` & `src/Configuration/Settings.cs:538`
 - **Problem**: The 1-second refresh timer calls `list.Items.Clear()` whenever collection counts change, deselecting the user's active item while they are trying to click "Remove" or review typos. Furthermore, if a user edits wordlists in Notepad while `SettingsForm` is open, any subsequent save from the UI overwrites Notepad's disk changes.
+- **Impact**: Deselects user selections mid-interaction and risks data loss on external file edits.
 - **Fix**: Perform differential updates on `ListBox.Items` without clearing unchanged lists, preserve `SelectedIndex`, and check file write timestamps prior to saving.
 
-### [HIGH-09] Floating Candidate Popup Has No Caret Tracking
+### [HIGH-09] Floating Candidate Popup Has No Caret Tracking [RESOLVED]
 - **Location**: `src/UI/CandidatePopup.cs:115-155`
 - **Problem**: The popup does not query Win32 `GetGUIThreadInfo` or UI Automation caret position; it merely checks the foreground window's outer rectangle and positions itself at an offset. On multi-monitor setups with negative coordinates, or when editors are anchored to the bottom/right of screens, the popup renders completely off-screen or covers the text being typed.
+- **Impact**: Candidates popup renders in wrong screen locations or off-screen.
 - **Fix**: Query `GetGUIThreadInfo` to locate the true text insertion caret `rcCaret`. Fall back to cursor position or window bounds only if caret info is inaccessible. Implement per-monitor DPI scaling.
 
 ---
@@ -157,7 +159,7 @@
 - **Impact**: Accented words were penalized in ranking.
 - **Fix**: Include accented vowels in `IsVowel` and add `BaseChar(c)` to provide cheap `0.2` swap cost for diacritic accent corrections.
 
-### [MED-03] Major High-Frequency Homophone Gaps in Phrase Fixes
+### [MED-03] Major High-Frequency Homophone Gaps in Phrase Fixes [RESOLVED]
 - **Location**: `data/phrase-fixes.txt`
 - **Problem**: The phrase-fix dictionary has minimal coverage for the most frequent grammatical mistakes in English typing:
   - `they're / their / there`: `there going` -> `they're going`, `their is` -> `there is`, `put it over their` -> `put it over there`.
@@ -174,7 +176,7 @@
 - **Impact**: The engine treated `\u2019` as a foreign character / punctuation break, splitting contractions like `don’t` into `don` and `t`.
 - **Fix**: Normalize curly single quotes (`\u2018`, `\u2019`) to ASCII `'` in `Engine.Char` and `Ranker.Best`.
 
-### [MED-05] TypoLog Memory Leak Under Continuous Unique Misspellings
+### [MED-05] TypoLog Memory Leak Under Continuous Unique Misspellings [RESOLVED]
 - **Location**: `src/Configuration/Settings.cs:686-688`
 - **Problem**: When `counts.Count > MaxEntries`, `TypoLog` purges items with count == 1. Once all items in the dictionary have a count >= 2, the purge removes 0 items.
 - **Impact**: In long sessions, the dictionary grows indefinitely, and `new List<string>(counts.Keys)` is allocated inside `lock (gate)` on every single correction on the keyboard hook thread.
@@ -184,13 +186,13 @@
 
 ## 4. UI, Accessibility & Tooling Gaps (P3)
 
-### [LOW-01] Missing DPI Awareness Manifest
+### [LOW-01] Missing DPI Awareness Manifest [RESOLVED]
 - **Location**: Application Manifest / `KeyboardWriterHelper.csproj`
 - **Problem**: The executable does not embed an `app.manifest` declaring `perMonitorV2` DPI awareness.
 - **Impact**: On high-DPI displays (4K screens, 150%+ scaling, Surface laptops), Windows applies bitmap stretching, making tray icons, settings text, and the candidate popup blurry.
 - **Fix**: Add a standard Windows application manifest declaring `PerMonitorV2` DPI awareness and Common Controls 6.0.
 
-### [LOW-02] UI Accessibility & Keyboard Navigation Deficits
+### [LOW-02] UI Accessibility & Keyboard Navigation Deficits [RESOLVED]
 - **Location**: `src/UI/SettingsForm.cs` & `src/UI/CandidatePopup.cs`
 - **Problem**:
   - `CandidatePopup` does not expose UI Automation or MSAA properties for screen readers.
@@ -198,7 +200,7 @@
   - Low contrast colors used for hint labels in `CandidatePopup` (RGB 120, 124, 132 on dark grey).
 - **Fix**: Assign explicit tab stops, add keyboard accelerators, ensure WCAG 2.1 AA contrast ratios, and emit accessibility notifications when candidates appear.
 
-### [LOW-03] Test Suite Blind Spots
+### [LOW-03] Test Suite Blind Spots [RESOLVED]
 - **Location**: `tests/typing-cases.txt`
 - **Missing Coverage**:
   - No test cases for dynamic snippets (`{date}`, `{time}`, `{clip}`).

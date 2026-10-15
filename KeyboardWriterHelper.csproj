@@ -8,6 +8,8 @@
     <RootNamespace>KeyboardWriterHelper</RootNamespace>
     <AssemblyName>KeyboardWriterHelper</AssemblyName>
     <StartupObject>KeyboardWriterHelper.Program</StartupObject>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

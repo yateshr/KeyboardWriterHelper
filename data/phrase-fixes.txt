@@ -28,6 +28,9 @@ arising form=arising from
 more then=more than
 less then=less than
 rather then=rather than
+other then=other than
+sooner then=sooner than
+later then=later than
 and than=and then
 but than=but then
 since than=since then
@@ -52,12 +55,16 @@ were did=where did
 were can=where can
 know were=know where
 
-# there / their
+# there / their / they're
 their is=there is
 their are=there are
 their was=there was
 their were=there were
 there own=their own
+there going=they're going
+there coming=they're coming
+there doing=they're doing
+there not=they're not
 
 # it's / its
 its a=it's a
@@ -65,6 +72,11 @@ its an=it's an
 its not=it's not
 its been=it's been
 its the=it's the
+its ok=it's ok
+its okay=it's okay
+its fine=it's fine
+its true=it's true
+its clear=it's clear
 
 # you're / your
 your a=you're a
@@ -72,13 +84,22 @@ your an=you're an
 your not=you're not
 your the=you're the
 your are=you are
+your going=you're going
+your doing=you're doing
+your coming=you're coming
+your welcome to=you're welcome to
 
 # lose, typed as loose
 loose weight=lose weight
+loose it=lose it
+loose you=lose you
+loose them=lose them
 will loose=will lose
 would loose=would lose
 could loose=could lose
 might loose=might lose
+lose knot=loose knot
+lose tooth=loose tooth
 
 # here, typed as hear
 over hear=over here
@@ -182,3 +203,6 @@ one in the same=one and the same
 for all intensive purposes=for all intents and purposes
 all of the sudden=all of a sudden
 piece of mind=peace of mind
+sneak peak=sneak peek
+deep seeded=deep seated
+free reign=free rein
