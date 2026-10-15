@@ -73,6 +73,82 @@ namespace KeyboardWriterHelper
 
         static readonly HashSet<string> Abbreviations = Data.Words("abbreviations.txt");
 
+
+
+        static readonly Dictionary<string, string> PastToBareInfinitive = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+
+        {
+
+            { "went", "go" }, { "saw", "see" }, { "did", "do" }, { "took", "take" }, { "came", "come" },
+
+            { "gave", "give" }, { "made", "make" }, { "ate", "eat" }, { "broke", "break" }, { "spoke", "speak" },
+
+            { "wrote", "write" }, { "ran", "run" }, { "knew", "know" }, { "chose", "choose" }, { "drove", "drive" },
+
+            { "fell", "fall" }, { "felt", "feel" }, { "forgot", "forget" }, { "froze", "freeze" }, { "grew", "grow" },
+
+            { "heard", "hear" }, { "hid", "hide" }, { "held", "hold" }, { "kept", "keep" }, { "left", "leave" },
+
+            { "lost", "lose" }, { "paid", "pay" }, { "rode", "ride" }, { "rang", "ring" }, { "rose", "rise" },
+
+            { "sold", "sell" }, { "sent", "send" }, { "sang", "sing" }, { "sank", "sink" }, { "sat", "sit" },
+
+            { "slept", "sleep" }, { "stood", "stand" }, { "stole", "steal" }, { "swam", "swim" }, { "threw", "throw" },
+
+            { "told", "tell" }, { "woke", "wake" }, { "wore", "wear" }, { "won", "win" }, { "bought", "buy" },
+
+            { "brought", "bring" }, { "caught", "catch" }, { "fought", "fight" }, { "taught", "teach" }, { "thought", "think" }
+
+        };
+
+
+
+        static readonly Dictionary<string, string> PastToPastParticiple = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+
+        {
+
+            { "went", "gone" }, { "saw", "seen" }, { "did", "done" }, { "took", "taken" }, { "gave", "given" },
+
+            { "wrote", "written" }, { "broke", "broken" }, { "spoke", "spoken" }, { "ate", "eaten" }, { "chose", "chosen" },
+
+            { "drove", "driven" }, { "fell", "fallen" }, { "froze", "frozen" }, { "grew", "grown" }, { "hid", "hidden" },
+
+            { "rode", "ridden" }, { "rose", "risen" }, { "stole", "stolen" }, { "threw", "thrown" }, { "woke", "woken" },
+
+            { "wore", "worn" }, { "shook", "shaken" }, { "bit", "bitten" }, { "blew", "blown" }, { "drew", "drawn" },
+
+            { "flew", "flown" }, { "knew", "known" }, { "ran", "run" }, { "came", "come" }, { "began", "begun" },
+
+            { "drank", "drunk" }, { "sang", "sung" }, { "sank", "sunk" }, { "swam", "swum" }, { "rang", "rung" },
+
+            { "tore", "torn" }, { "swore", "sworn" }, { "bore", "borne" }, { "forgave", "forgiven" }, { "forgot", "forgotten" }
+
+        };
+
+
+
+        static readonly Dictionary<string, string> SubjectVerbAgreement = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+
+        {
+
+            { "they does", "they do" }, { "we does", "we do" }, { "you does", "you do" },
+
+            { "they is", "they are" }, { "we is", "we are" }, { "you is", "you are" },
+
+            { "they was", "they were" }, { "we was", "we were" }, { "you was", "you were" },
+
+            { "he don't", "he doesn't" }, { "she don't", "she doesn't" }, { "it don't", "it doesn't" },
+
+            { "he have", "he has" }, { "she have", "she has" }, { "it have", "it has" },
+
+            { "they has", "they have" }, { "we has", "we have" }, { "you has", "you have" },
+
+            { "i has", "i have" }, { "i is", "i am" }, { "i are", "i am" },
+
+            { "he were", "he was" }, { "she were", "she was" }
+
+        };
+
     
 
         readonly Func<string, string, bool, Suggestion> suggest; // (word, word before in lower case, cautious)
@@ -1232,7 +1308,551 @@ namespace KeyboardWriterHelper
 
     
 
+            // 4. Try dynamic sentence grammar rules (Articles, Agreement, Modals)
+
+            if (FixPhrases && !otherLanguage && !isIgnored(current))
+
+            {
+
+                string gramFix = DynamicGrammarRule(secondPrevious, previous, current, out phraseLead);
+
+                if (gramFix != null && !isIgnored(phraseLead + current))
+
+                    return gramFix;
+
+            }
+
+
+
             return null;
+
+        }
+
+
+
+        string DynamicGrammarRule(string secondPrev, string prev, string curr, out string phraseLead)
+
+        {
+
+            phraseLead = null;
+
+            if (string.IsNullOrEmpty(prev) || string.IsNullOrEmpty(curr)) return null;
+
+            string prevLower = prev.ToLowerInvariant();
+
+            string currLower = curr.ToLowerInvariant();
+
+
+
+            // 1. Check 3-word rule: [modal/auxiliary] + not + [verb]
+
+            if (!string.IsNullOrEmpty(secondPrev) && prevLower == "not")
+
+            {
+
+                string secLower = secondPrev.ToLowerInvariant();
+
+                if (IsModalAuxiliary(secLower) || IsDoAuxiliary(secLower))
+
+                {
+
+                    string infinitive;
+
+                    if (PastToBareInfinitive.TryGetValue(currLower, out infinitive))
+
+                    {
+
+                        if (char.IsUpper(curr[0])) infinitive = Capital(infinitive);
+
+                        phraseLead = secondPrev + " " + prev + " ";
+
+                        return secondPrev + " " + prev + " " + infinitive;
+
+                    }
+
+                    if (currLower == "has" || currLower == "had")
+
+                    {
+
+                        phraseLead = secondPrev + " " + prev + " ";
+
+                        return secondPrev + " " + prev + " have";
+
+                    }
+
+                }
+
+                else if (IsPerfectAuxiliary(secLower))
+
+                {
+
+                    string participle;
+
+                    if (PastToPastParticiple.TryGetValue(currLower, out participle))
+
+                    {
+
+                        if (char.IsUpper(curr[0])) participle = Capital(participle);
+
+                        phraseLead = secondPrev + " " + prev + " ";
+
+                        return secondPrev + " " + prev + " " + participle;
+
+                    }
+
+                }
+
+            }
+
+
+
+            // 2. Dynamic Article Agreement: a vs an
+
+            if (prevLower == "a")
+
+            {
+
+                if (NeedsAnArticle(currLower))
+
+                {
+
+                    phraseLead = prev + " ";
+
+                    return (char.IsUpper(prev[0]) ? "An " : "an ") + curr;
+
+                }
+
+            }
+
+            else if (prevLower == "an")
+
+            {
+
+                if (NeedsAArticle(currLower))
+
+                {
+
+                    phraseLead = prev + " ";
+
+                    return (char.IsUpper(prev[0]) ? "A " : "a ") + curr;
+
+                }
+
+            }
+
+
+
+            // 3. Modal Verb + Bare Infinitive (modals must take bare infinitive, never past simple)
+
+            if (IsModalAuxiliary(prevLower))
+
+            {
+
+                string infinitive;
+
+                if (PastToBareInfinitive.TryGetValue(currLower, out infinitive))
+
+                {
+
+                    if (char.IsUpper(curr[0])) infinitive = Capital(infinitive);
+
+                    phraseLead = prev + " ";
+
+                    return prev + " " + infinitive;
+
+                }
+
+            }
+
+
+
+            // 4. Perfect Aspect: have/has/had + past participle (never past simple)
+
+            if (IsPerfectAuxiliary(prevLower))
+
+            {
+
+                string participle;
+
+                if (PastToPastParticiple.TryGetValue(currLower, out participle))
+
+                {
+
+                    if (char.IsUpper(curr[0])) participle = Capital(participle);
+
+                    phraseLead = prev + " ";
+
+                    return prev + " " + participle;
+
+                }
+
+            }
+
+
+
+            // 5. Do-Support: did/didn't/does/doesn't/do/don't + bare infinitive
+
+            if (IsDoAuxiliary(prevLower))
+
+            {
+
+                string infinitive;
+
+                if (PastToBareInfinitive.TryGetValue(currLower, out infinitive))
+
+                {
+
+                    if (char.IsUpper(curr[0])) infinitive = Capital(infinitive);
+
+                    phraseLead = prev + " ";
+
+                    return prev + " " + infinitive;
+
+                }
+
+                if (currLower == "has" || currLower == "had")
+
+                {
+
+                    phraseLead = prev + " ";
+
+                    return prev + " have";
+
+                }
+
+            }
+
+
+
+            // 6. Subject-Verb Agreement (Pronoun + Auxiliary/Verb)
+
+            string agreementFix;
+
+            if (SubjectVerbAgreement.TryGetValue(prevLower + " " + currLower, out agreementFix))
+
+            {
+
+                phraseLead = prev + " ";
+
+                if (char.IsUpper(prev[0])) agreementFix = Capital(agreementFix);
+
+                if (char.IsUpper(curr[0]))
+
+                {
+
+                    int sp = agreementFix.IndexOf(' ');
+
+                    if (sp > 0 && sp + 1 < agreementFix.Length)
+
+                        agreementFix = agreementFix.Substring(0, sp + 1) + Capital(agreementFix.Substring(sp + 1));
+
+                }
+
+                return agreementFix;
+
+            }
+
+
+
+            return null;
+
+        }
+
+
+
+        static bool NeedsAnArticle(string word)
+
+        {
+
+            if (string.IsNullOrEmpty(word) || word.Length < 2) return false;
+
+            if (char.IsUpper(word[0]) && char.IsUpper(word[1])) return false;
+
+
+
+            char first = char.ToLowerInvariant(word[0]);
+
+
+
+            if (first == 'h')
+
+            {
+
+                return word.StartsWith("hour", StringComparison.OrdinalIgnoreCase) ||
+
+                       word.StartsWith("honest", StringComparison.OrdinalIgnoreCase) ||
+
+                       word.StartsWith("honor", StringComparison.OrdinalIgnoreCase) ||
+
+                       word.StartsWith("honour", StringComparison.OrdinalIgnoreCase) ||
+
+                       word.StartsWith("heir", StringComparison.OrdinalIgnoreCase);
+
+            }
+
+
+
+            if (first != 'a' && first != 'e' && first != 'i' && first != 'o' && first != 'u')
+
+                return false;
+
+
+
+            if (first == 'u')
+
+            {
+
+                if (word.StartsWith("user", StringComparison.OrdinalIgnoreCase) ||
+
+                    word.StartsWith("usag", StringComparison.OrdinalIgnoreCase) ||
+
+                    word.StartsWith("usef", StringComparison.OrdinalIgnoreCase) ||
+
+                    word.StartsWith("usel", StringComparison.OrdinalIgnoreCase) ||
+
+                    word.StartsWith("unit", StringComparison.OrdinalIgnoreCase) ||
+
+                    word.StartsWith("uniq", StringComparison.OrdinalIgnoreCase) ||
+
+                    word.StartsWith("univ", StringComparison.OrdinalIgnoreCase) ||
+
+                    word.StartsWith("unif", StringComparison.OrdinalIgnoreCase) ||
+
+                    word.StartsWith("unic", StringComparison.OrdinalIgnoreCase) ||
+
+                    word.StartsWith("util", StringComparison.OrdinalIgnoreCase) ||
+
+                    word.StartsWith("utop", StringComparison.OrdinalIgnoreCase) ||
+
+                    word.StartsWith("usua", StringComparison.OrdinalIgnoreCase) ||
+
+                    word.StartsWith("ubiq", StringComparison.OrdinalIgnoreCase) ||
+
+                    word.StartsWith("unilat", StringComparison.OrdinalIgnoreCase) ||
+
+                    word.StartsWith("uro", StringComparison.OrdinalIgnoreCase))
+
+                    return false;
+
+                return true;
+
+            }
+
+
+
+            if (word.StartsWith("eu", StringComparison.OrdinalIgnoreCase)) return false;
+
+            if (word.StartsWith("one", StringComparison.OrdinalIgnoreCase) || word.Equals("once", StringComparison.OrdinalIgnoreCase)) return false;
+
+
+
+            return true;
+
+        }
+
+
+
+        static bool NeedsAArticle(string word)
+
+        {
+
+            if (string.IsNullOrEmpty(word) || word.Length < 2) return false;
+
+            if (char.IsUpper(word[0]) && char.IsUpper(word[1])) return false;
+
+
+
+            char first = char.ToLowerInvariant(word[0]);
+
+
+
+            if (word.StartsWith("user", StringComparison.OrdinalIgnoreCase) ||
+
+                word.StartsWith("usag", StringComparison.OrdinalIgnoreCase) ||
+
+                word.StartsWith("usef", StringComparison.OrdinalIgnoreCase) ||
+
+                word.StartsWith("usel", StringComparison.OrdinalIgnoreCase) ||
+
+                word.StartsWith("unit", StringComparison.OrdinalIgnoreCase) ||
+
+                word.StartsWith("uniq", StringComparison.OrdinalIgnoreCase) ||
+
+                word.StartsWith("univ", StringComparison.OrdinalIgnoreCase) ||
+
+                word.StartsWith("unif", StringComparison.OrdinalIgnoreCase) ||
+
+                word.StartsWith("unic", StringComparison.OrdinalIgnoreCase) ||
+
+                word.StartsWith("util", StringComparison.OrdinalIgnoreCase) ||
+
+                word.StartsWith("utop", StringComparison.OrdinalIgnoreCase) ||
+
+                word.StartsWith("usua", StringComparison.OrdinalIgnoreCase) ||
+
+                word.StartsWith("ubiq", StringComparison.OrdinalIgnoreCase) ||
+
+                word.StartsWith("unilat", StringComparison.OrdinalIgnoreCase) ||
+
+                word.StartsWith("uro", StringComparison.OrdinalIgnoreCase) ||
+
+                word.StartsWith("eu", StringComparison.OrdinalIgnoreCase) ||
+
+                word.StartsWith("one", StringComparison.OrdinalIgnoreCase) ||
+
+                word.Equals("once", StringComparison.OrdinalIgnoreCase))
+
+                return true;
+
+
+
+            if (first == 'h')
+
+            {
+
+                if (word.StartsWith("hour", StringComparison.OrdinalIgnoreCase) ||
+
+                    word.StartsWith("honest", StringComparison.OrdinalIgnoreCase) ||
+
+                    word.StartsWith("honor", StringComparison.OrdinalIgnoreCase) ||
+
+                    word.StartsWith("honour", StringComparison.OrdinalIgnoreCase) ||
+
+                    word.StartsWith("heir", StringComparison.OrdinalIgnoreCase))
+
+                    return false;
+
+                return true;
+
+            }
+
+
+
+            if (first != 'a' && first != 'e' && first != 'i' && first != 'o' && first != 'u')
+
+                return true;
+
+
+
+            return false;
+
+        }
+
+
+
+        static bool IsModalAuxiliary(string word)
+
+        {
+
+            switch (word)
+
+            {
+
+                case "could":
+
+                case "should":
+
+                case "would":
+
+                case "can":
+
+                case "will":
+
+                case "might":
+
+                case "must":
+
+                case "shall":
+
+                case "couldn't":
+
+                case "shouldn't":
+
+                case "wouldn't":
+
+                case "can't":
+
+                case "cannot":
+
+                case "won't":
+
+                case "mightn't":
+
+                case "mustn't":
+
+                case "shan't":
+
+                    return true;
+
+                default:
+
+                    return false;
+
+            }
+
+        }
+
+
+
+        static bool IsPerfectAuxiliary(string word)
+
+        {
+
+            switch (word)
+
+            {
+
+                case "have":
+
+                case "has":
+
+                case "had":
+
+                case "haven't":
+
+                case "hasn't":
+
+                case "hadn't":
+
+                    return true;
+
+                default:
+
+                    return false;
+
+            }
+
+        }
+
+
+
+        static bool IsDoAuxiliary(string word)
+
+        {
+
+            switch (word)
+
+            {
+
+                case "did":
+
+                case "didn't":
+
+                case "does":
+
+                case "doesn't":
+
+                case "do":
+
+                case "don't":
+
+                    return true;
+
+                default:
+
+                    return false;
+
+            }
 
         }
 

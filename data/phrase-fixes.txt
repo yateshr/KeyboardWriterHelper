@@ -348,3 +348,63 @@ honed in on=homed in on
 honing in on=homing in on
 hones in on=homes in on
 
+# Quantifiers and countable agreement
+much items=many items
+much books=many books
+much people=many people
+much things=many things
+much questions=many questions
+much problems=many problems
+much times=many times
+much days=many days
+much years=many years
+much hours=many hours
+much minutes=many minutes
+much seconds=many seconds
+much users=many users
+much cars=many cars
+much files=many files
+much errors=many errors
+these kind=this kind
+those kind=that kind
+every persons=every person
+each persons=each person
+each students=each student
+each members=each member
+each items=each item
+each books=each book
+
+# Expanded of / have after modals
+could of had=could have had
+would of had=would have had
+should of had=should have had
+could of made=could have made
+would of made=would have made
+should of made=should have made
+could of said=could have said
+would of said=would have said
+should of said=should have said
+could of seen=could have seen
+would of seen=would have seen
+should of seen=should have seen
+could of taken=could have taken
+would of taken=would have taken
+should of taken=should have taken
+could of come=could have come
+would of come=would have come
+should of come=should have come
+could of given=could have given
+would of given=would have given
+should of given=should have given
+might of been=might have been
+must of been=must have been
+might of had=might have had
+must of had=must have had
+
+# High-frequency grammatical collocations
+piece of mind=peace of mind
+all intensive purposes=all intents and purposes
+for all intensive purposes=for all intents and purposes
+suppose to be=supposed to be
+free reign=free rein
+deep seeded=deep-seated

@@ -236,3 +236,28 @@
 "git c{TAB}" => "git commit "
 "docker r{TAB}" => "docker run "
 @ reset
+
+# ---- sentence grammar agreement & modal rules (Option B) ----
+"they does " => "they do "
+"we does " => "we do "
+"They does " => "They do "
+"could went " => "could go "
+"Could went " => "Could go "
+"should saw " => "should see "
+"would took " => "would take "
+"did went " => "did go "
+"could not went " => "could not go "
+"has not went " => "has not gone "
+"a elephant " => "an elephant "
+"A elephant " => "An elephant "
+"a hour " => "an hour "
+"a user " => "a user "
+"a university " => "a university "
+"an user " => "a user "
+"An user " => "A user "
+"much items " => "many items "
+"much people " => "many people "
+"each persons " => "each person "
+"these kind " => "this kind "
+"could went {BS}" => "could went"
+@ reset
