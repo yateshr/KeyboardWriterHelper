@@ -282,3 +282,29 @@
 "cons{TAB}" => "cons	"
 "the {TAB}" => "the 	"
 @ reset
+
+# ---- snippets in My fixes: --cases uses a fixed clock (2026-01-02 03:04) and
+# the clipboard "line one", line break, "line two", tab, "tab" ----
+@ fix today={date}
+@ fix now={time}
+@ fix stamp={datetime}
+@ fix myclip={clip}
+@ fix cc=:clip:
+"today " => "2026-01-02 "
+"now " => "03:04 "
+"stamp " => "2026-01-02 03:04 "
+"myclip " => "line one line two tab "
+"cc " => "line one line two tab "
+@ reset
+
+# ---- smart typography, each kind ----
+@ smartdashes on
+@ smartellipsis on
+@ smartarrows on
+"a --- b " => "a — b "
+"wait... then " => "wait… Then "
+"a -> b " => "a → b "
+"x => y " => "x ⇒ y "
+"a <- b " => "a ← b "
+"a -- {BS}" => "a --"
+@ reset

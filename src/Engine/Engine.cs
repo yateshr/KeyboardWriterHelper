@@ -114,10 +114,16 @@ namespace KeyboardWriterHelper
             "for", "but", "he", "she", "we", "they", "you", "me", "him", "them", "my", "his", "her", "do", "does", "did"
         };
 
-        readonly Func<string, string, bool, Suggestion> suggest; // (word, word before in lower case, cautious)
-        readonly Func<string, string, string, bool, Suggestion> suggestWithContext; // (word, secondPrevious, previous, cautious)
-        readonly Func<string, string, string> predict; // (previous, prefix) -> predictedWord
-        readonly Func<string, string, string, string> predictWithContext; // (secondPrevious, previous, prefix) -> predictedWord
+        // Typed symbols that Space turns into typography, longest first ("---"
+        // before "--"), with what they become and the setting that allows it.
+        enum SymbolKind { Dash, Ellipsis, Arrow }
+        static readonly string[] SymbolsTyped = { "---", "--", "...", "->", "=>", "<-" };
+        static readonly string[] SymbolsShown = { "—", "—", "…", "→", "⇒", "←" };
+        static readonly SymbolKind[] SymbolKinds =
+            { SymbolKind.Dash, SymbolKind.Dash, SymbolKind.Ellipsis, SymbolKind.Arrow, SymbolKind.Arrow, SymbolKind.Arrow };
+
+        readonly Func<string, string, string, bool, Suggestion> suggest; // (word, second word before, word before, cautious); words before in lower case
+        readonly Func<string, string, string, string> predict; // (second word before, word before, prefix) -> predicted word, or null
         readonly Func<string, bool> isIgnored;
         // The user's own fix for a word or a two-word phrase, or null.
         readonly Func<string, string> ownFix;
@@ -167,6 +173,11 @@ namespace KeyboardWriterHelper
         public volatile bool SmartEllipsis;
         public volatile bool SmartCompose = true;
 
+        // Where {date}, {time} and {clip} in a snippet come from. The keyboard
+        // thread gives the clipboard; tests give a fixed clock and text.
+        public Func<DateTime> Clock = delegate { return DateTime.Now; };
+        public Func<string> Clipboard = delegate { return ""; };
+
         sealed class PredictionUndo
         {
             public string Prefix;
@@ -191,14 +202,9 @@ namespace KeyboardWriterHelper
         public event Action<string, string> PredictionOffered;
         public event Action PredictionDismissed;
 
-        public Engine(Func<string, string, bool, Suggestion> suggest, Func<string, bool> isIgnored,
-            Func<string, string> ownFix, Action<int, string> emit)
-            : this(suggest, isIgnored, ownFix, emit, null)
-        {
-        }
-
-        public Engine(Func<string, string, bool, Suggestion> suggest, Func<string, bool> isIgnored,
-            Func<string, string> ownFix, Action<int, string> emit, Func<string, string, string> predict)
+        // predict may be null (no Smart Compose).
+        public Engine(Func<string, string, string, bool, Suggestion> suggest, Func<string, bool> isIgnored,
+            Func<string, string> ownFix, Action<int, string> emit, Func<string, string, string, string> predict)
         {
             this.suggest = suggest;
             this.isIgnored = isIgnored;
@@ -207,36 +213,27 @@ namespace KeyboardWriterHelper
             this.predict = predict;
         }
 
-        public Engine(Func<string, string, string, bool, Suggestion> suggestWithContext, Func<string, bool> isIgnored,
-            Func<string, string> ownFix, Action<int, string> emit, Func<string, string, string> predict)
+        // Offers Smart Compose's guess for the word being typed or, with nothing
+        // typed yet, for the next word; or takes the last guess away.
+        // sentenceStart: a next-word guess gets a capital.
+        void OfferPrediction(bool sentenceStart)
         {
-            this.suggestWithContext = suggestWithContext;
-            this.suggest = delegate(string w, string p, bool c) { return suggestWithContext(w, null, p, c); };
-            this.isIgnored = isIgnored;
-            this.ownFix = ownFix;
-            this.emit = emit;
-            this.predict = predict;
+            string pfx = word.ToString();
+            string pred = null;
+            if (SmartCompose && predict != null && !tainted && (pfx.Length > 0 || previous != null))
+                pred = predict(Lower(secondPrevious), Lower(previous), pfx.ToLowerInvariant());
+            if (string.IsNullOrEmpty(pred) || pred.Equals(pfx, StringComparison.OrdinalIgnoreCase))
+            {
+                DismissPrediction();
+                return;
+            }
+            if ((pfx.Length > 0 ? char.IsUpper(pfx[0]) : sentenceStart) && char.IsLower(pred[0])) pred = Capital(pred);
+            currentPrediction = pred;
+            currentPrefix = pfx;
+            if (PredictionOffered != null) PredictionOffered(currentPrediction, currentPrefix);
         }
 
-        public Engine(Func<string, string, string, bool, Suggestion> suggestWithContext, Func<string, bool> isIgnored,
-            Func<string, string> ownFix, Action<int, string> emit, Func<string, string, string, string> predictWithContext)
-        {
-            this.suggestWithContext = suggestWithContext;
-            this.suggest = delegate(string w, string p, bool c) { return suggestWithContext(w, null, p, c); };
-            this.isIgnored = isIgnored;
-            this.ownFix = ownFix;
-            this.emit = emit;
-            this.predictWithContext = predictWithContext;
-        }
-
-        string Predict(string secondPrev, string prev, string pfx)
-        {
-            if (predictWithContext != null)
-                return predictWithContext(secondPrev, prev, pfx);
-            if (predict != null)
-                return predict(prev, pfx);
-            return null;
-        }
+        static string Lower(string text) { return text == null ? null : text.ToLowerInvariant(); }
 
         public bool AcceptPrediction()
         {
@@ -320,102 +317,13 @@ namespace KeyboardWriterHelper
                 }
                 word.Append(c);
                 if (word.Length > MaxWordLength) { Clear(); tainted = true; DismissPrediction(); return false; }
-                if (SmartCompose && (predictWithContext != null || predict != null) && !tainted && word.Length >= 1)
-                {
-                    string pfx = word.ToString();
-                    string pred = Predict(secondPrevious == null ? null : secondPrevious.ToLowerInvariant(), previous == null ? null : previous.ToLowerInvariant(), pfx.ToLowerInvariant());
-                    if (!string.IsNullOrEmpty(pred) && !pred.Equals(pfx, StringComparison.OrdinalIgnoreCase))
-                    {
-                        if (char.IsUpper(pfx[0]) && char.IsLower(pred[0]))
-                            pred = char.ToUpperInvariant(pred[0]) + pred.Substring(1);
-                        currentPrediction = pred;
-                        currentPrefix = pfx;
-                        if (PredictionOffered != null) PredictionOffered(currentPrediction, currentPrefix);
-                    }
-                    else
-                    {
-                        DismissPrediction();
-                    }
-                }
-                else
-                {
-                    DismissPrediction();
-                }
-
+                OfferPrediction(false);
                 return false;
             }
 
             if (c == ' ')
             {
-                string sym = symbols.ToString();
-                if (SmartDashes && sym.EndsWith("--- "))
-                {
-                    emit(3, "— ");
-                    undo = new Undo { Lead = "", Original = "---", Fix = "—", Terminator = " ", Previous = previous, SecondPrevious = secondPrevious, ThirdPrevious = thirdPrevious, Choices = new string[] { "—", "---" } };
-                    symbols.Length = 0;
-                    Clear();
-                    tainted = false;
-                    thirdPrevious = secondPrevious = previous = null;
-                    if (CandidateOffered != null) CandidateOffered("—", undo.Choices);
-                    return true;
-                }
-                if (SmartDashes && sym.EndsWith("-- "))
-                {
-                    emit(2, "— ");
-                    undo = new Undo { Lead = "", Original = "--", Fix = "—", Terminator = " ", Previous = previous, SecondPrevious = secondPrevious, ThirdPrevious = thirdPrevious, Choices = new string[] { "—", "--" } };
-                    symbols.Length = 0;
-                    Clear();
-                    tainted = false;
-                    thirdPrevious = secondPrevious = previous = null;
-                    if (CandidateOffered != null) CandidateOffered("—", undo.Choices);
-                    return true;
-                }
-                if (SmartEllipsis && sym.EndsWith("... "))
-                {
-                    emit(3, "… ");
-                    undo = new Undo { Lead = "", Original = "...", Fix = "…", Terminator = " ", Previous = previous, SecondPrevious = secondPrevious, ThirdPrevious = thirdPrevious, Choices = new string[] { "…", "..." } };
-                    symbols.Length = 0;
-                    Clear();
-                    tainted = false;
-                    afterSentenceEnd = true;
-                    capNext = true;
-                    thirdPrevious = secondPrevious = previous = null;
-                    if (CandidateOffered != null) CandidateOffered("…", undo.Choices);
-                    return true;
-                }
-                if (SmartArrows && sym.EndsWith("-> "))
-                {
-                    emit(2, "→ ");
-                    undo = new Undo { Lead = "", Original = "->", Fix = "→", Terminator = " ", Previous = previous, SecondPrevious = secondPrevious, ThirdPrevious = thirdPrevious, Choices = new string[] { "→", "->" } };
-                    symbols.Length = 0;
-                    Clear();
-                    tainted = false;
-                    thirdPrevious = secondPrevious = previous = null;
-                    if (CandidateOffered != null) CandidateOffered("→", undo.Choices);
-                    return true;
-                }
-                if (SmartArrows && sym.EndsWith("=> "))
-                {
-                    emit(2, "⇒ ");
-                    undo = new Undo { Lead = "", Original = "=>", Fix = "⇒", Terminator = " ", Previous = previous, SecondPrevious = secondPrevious, ThirdPrevious = thirdPrevious, Choices = new string[] { "⇒", "=>" } };
-                    symbols.Length = 0;
-                    Clear();
-                    tainted = false;
-                    thirdPrevious = secondPrevious = previous = null;
-                    if (CandidateOffered != null) CandidateOffered("⇒", undo.Choices);
-                    return true;
-                }
-                if (SmartArrows && sym.EndsWith("<- "))
-                {
-                    emit(2, "← ");
-                    undo = new Undo { Lead = "", Original = "<-", Fix = "←", Terminator = " ", Previous = previous, SecondPrevious = secondPrevious, ThirdPrevious = thirdPrevious, Choices = new string[] { "←", "<-" } };
-                    symbols.Length = 0;
-                    Clear();
-                    tainted = false;
-                    thirdPrevious = secondPrevious = previous = null;
-                    if (CandidateOffered != null) CandidateOffered("←", undo.Choices);
-                    return true;
-                }
+                if (TrySmartSymbol(symbols.ToString())) return true;
 
                 // As on a phone keyboard. The first space is already on screen.
                 if (secondSpace && DoubleSpacePeriod)
@@ -443,27 +351,7 @@ namespace KeyboardWriterHelper
                 if (hadWord)
                     capNext = ending.Length > 0 && IsSentenceEnd(ending[ending.Length - 1]) &&
                               (ending[ending.Length - 1] != '.' || !IsAbbreviation(last));
-                if (SmartCompose && (predictWithContext != null || predict != null) && plain && previous != null)
-                {
-                    string pred = Predict(secondPrevious == null ? null : secondPrevious.ToLowerInvariant(), previous.ToLowerInvariant(), "");
-                    if (!string.IsNullOrEmpty(pred))
-                    {
-                        if (capNext && char.IsLower(pred[0]))
-                            pred = char.ToUpperInvariant(pred[0]) + pred.Substring(1);
-                        currentPrediction = pred;
-                        currentPrefix = "";
-                        if (PredictionOffered != null) PredictionOffered(currentPrediction, currentPrefix);
-                    }
-                    else
-                    {
-                        DismissPrediction();
-                    }
-                }
-                else
-                {
-                    DismissPrediction();
-                }
-
+                OfferPrediction(capNext);
                 return swallowed;
             }
 
@@ -502,6 +390,35 @@ namespace KeyboardWriterHelper
             return false;
         }
 
+        // "-- " -> "— " and the like, when the setting is on. sym: the last
+        // characters typed, ending with the space. True when the space was taken.
+        bool TrySmartSymbol(string sym)
+        {
+            for (int i = 0; i < SymbolsTyped.Length; i++)
+            {
+                SymbolKind kind = SymbolKinds[i];
+                bool on = kind == SymbolKind.Dash ? SmartDashes : kind == SymbolKind.Ellipsis ? SmartEllipsis : SmartArrows;
+                string typed = SymbolsTyped[i], shown = SymbolsShown[i];
+                if (!on || !sym.EndsWith(typed + " ")) continue;
+
+                emit(typed.Length, shown + " ");
+                undo = new Undo { Lead = "", Original = typed, Fix = shown, Terminator = " ", Previous = previous,
+                                  SecondPrevious = secondPrevious, ThirdPrevious = thirdPrevious, Choices = new string[] { shown, typed } };
+                symbols.Length = 0;
+                Clear();
+                tainted = false;
+                if (kind == SymbolKind.Ellipsis)
+                {
+                    afterSentenceEnd = true;
+                    capNext = true;
+                }
+                thirdPrevious = secondPrevious = previous = null;
+                if (CandidateOffered != null) CandidateOffered(shown, undo.Choices);
+                return true;
+            }
+            return false;
+        }
+
         static bool IsAbbreviation(string w)
         {
             return w.Length == 1 || Abbreviations.Contains(w);
@@ -534,20 +451,7 @@ namespace KeyboardWriterHelper
                 thirdPrevious = null;
                 spaceAfterWord = false;
                 tainted = false;
-
-                if (SmartCompose && (predictWithContext != null || predict != null) && word.Length >= 1)
-                {
-                    string pfx = word.ToString();
-                    string pred = Predict(secondPrevious == null ? null : secondPrevious.ToLowerInvariant(), previous == null ? null : previous.ToLowerInvariant(), pfx.ToLowerInvariant());
-                    if (!string.IsNullOrEmpty(pred) && !pred.Equals(pfx, StringComparison.OrdinalIgnoreCase))
-                    {
-                        if (char.IsUpper(pfx[0]) && char.IsLower(pred[0]))
-                            pred = char.ToUpperInvariant(pred[0]) + pred.Substring(1);
-                        currentPrediction = pred;
-                        currentPrefix = pfx;
-                        if (PredictionOffered != null) PredictionOffered(currentPrediction, currentPrefix);
-                    }
-                }
+                if (word.Length > 0) OfferPrediction(false);
                 return true;
             }
 
@@ -587,21 +491,8 @@ namespace KeyboardWriterHelper
             else if (word.Length > 0)
             {
                 word.Length--;
-                if (SmartCompose && (predictWithContext != null || predict != null) && !tainted && word.Length >= 1)
-                {
-                    string pfx = word.ToString();
-                    string pred = Predict(secondPrevious == null ? null : secondPrevious.ToLowerInvariant(), previous == null ? null : previous.ToLowerInvariant(), pfx.ToLowerInvariant());
-                    if (!string.IsNullOrEmpty(pred) && !pred.Equals(pfx, StringComparison.OrdinalIgnoreCase))
-                    {
-                        if (char.IsUpper(pfx[0]) && char.IsLower(pred[0]))
-                            pred = char.ToUpperInvariant(pred[0]) + pred.Substring(1);
-                        currentPrediction = pred;
-                        currentPrefix = pfx;
-                        if (PredictionOffered != null) PredictionOffered(currentPrediction, currentPrefix);
-                    }
-                }
+                if (word.Length > 0) OfferPrediction(false);
             }
-
             else
             {
                 tainted = true;
@@ -1023,29 +914,40 @@ namespace KeyboardWriterHelper
             return phrase;
         }
 
-        static string ExpandSnippet(string fix)
+        // {date}, {time}, {datetime} and {clip} (or :date: and so on) in a fix.
+        // Dates are written the same whatever the Windows region (2026-01-31 14:05).
+        string ExpandSnippet(string fix)
         {
             if (string.IsNullOrEmpty(fix)) return fix;
             if (fix.IndexOf('{') < 0 && fix.IndexOf(':') < 0) return fix;
-            DateTime now = DateTime.Now;
-            string res = fix;
-            if (res.IndexOf("{date}", StringComparison.OrdinalIgnoreCase) >= 0)
-                res = ReplaceIgnoreCase(res, "{date}", now.ToString("yyyy-MM-dd"));
-            if (res.IndexOf(":date:", StringComparison.OrdinalIgnoreCase) >= 0)
-                res = ReplaceIgnoreCase(res, ":date:", now.ToString("yyyy-MM-dd"));
-            if (res.IndexOf("{time}", StringComparison.OrdinalIgnoreCase) >= 0)
-                res = ReplaceIgnoreCase(res, "{time}", now.ToString("HH:mm"));
-            if (res.IndexOf(":time:", StringComparison.OrdinalIgnoreCase) >= 0)
-                res = ReplaceIgnoreCase(res, ":time:", now.ToString("HH:mm"));
-            if (res.IndexOf("{datetime}", StringComparison.OrdinalIgnoreCase) >= 0)
-                res = ReplaceIgnoreCase(res, "{datetime}", now.ToString("yyyy-MM-dd HH:mm"));
-            if (res.IndexOf(":datetime:", StringComparison.OrdinalIgnoreCase) >= 0)
-                res = ReplaceIgnoreCase(res, ":datetime:", now.ToString("yyyy-MM-dd HH:mm"));
-            if (res.IndexOf("{clip}", StringComparison.OrdinalIgnoreCase) >= 0)
-                res = ReplaceIgnoreCase(res, "{clip}", Native.GetClipboardText());
-            if (res.IndexOf(":clip:", StringComparison.OrdinalIgnoreCase) >= 0)
-                res = ReplaceIgnoreCase(res, ":clip:", Native.GetClipboardText());
+            DateTime now = Clock();
+            string date = now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            string time = now.ToString("HH:mm", CultureInfo.InvariantCulture);
+            string res = ReplaceMacro(fix, "date", date);
+            res = ReplaceMacro(res, "time", time);
+            res = ReplaceMacro(res, "datetime", date + " " + time);
+            if (res.IndexOf("{clip}", StringComparison.OrdinalIgnoreCase) >= 0 || res.IndexOf(":clip:", StringComparison.OrdinalIgnoreCase) >= 0)
+                res = ReplaceMacro(res, "clip", OneLine(Clipboard()));
             return res;
+        }
+
+        static string ReplaceMacro(string text, string name, string value)
+        {
+            return ReplaceIgnoreCase(ReplaceIgnoreCase(text, "{" + name + "}", value), ":" + name + ":", value);
+        }
+
+        // Clipboard text goes in as one line: it is typed key by key, a line break
+        // in a chat box would send the message, and a tab would move the focus.
+        static string OneLine(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return "";
+            StringBuilder line = new StringBuilder(text.Length);
+            foreach (char c in text)
+            {
+                if (!char.IsControl(c) && c != (char)0x2028 && c != (char)0x2029) line.Append(c);
+                else if (line.Length > 0 && line[line.Length - 1] != ' ') line.Append(' ');
+            }
+            return line.ToString().Trim();
         }
 
         static string ReplaceIgnoreCase(string text, string search, string replacement)
@@ -1094,19 +996,7 @@ namespace KeyboardWriterHelper
             bool capitalised = char.IsUpper(w[0]);
             if (!CommonFixes.TryGetValue(w, out fix))
             {
-                Suggestion s;
-                if (suggestWithContext != null)
-                {
-                    s = suggestWithContext(w, secondPrevious == null ? null : secondPrevious.ToLowerInvariant(),
-                        previous == null ? null : previous.ToLowerInvariant(),
-                        capitalised || w.Length <= Ranker.ShortWord);
-                }
-                else
-                {
-                    s = suggest(w, previous == null ? null : previous.ToLowerInvariant(),
-                        capitalised || w.Length <= Ranker.ShortWord);
-                }
-
+                Suggestion s = suggest(w, Lower(secondPrevious), Lower(previous), capitalised || w.Length <= Ranker.ShortWord);
                 if (s == null) return null;
                 fix = s.Fix;
                 // A capital mid-sentence is most likely a name: only accept a fix

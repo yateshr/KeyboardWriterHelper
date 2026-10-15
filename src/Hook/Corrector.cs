@@ -40,12 +40,22 @@ namespace KeyboardWriterHelper
         readonly Dictionary<string, int> undoCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         readonly Counters counters;
         readonly Settings settings;
-        readonly HashSet<IntPtr> uipiBlocked = new HashSet<IntPtr>();
+        // Windows SendInput could not type into (elevated programs), with their process id.
+        readonly Dictionary<IntPtr, uint> uipiBlocked = new Dictionary<IntPtr, uint>();
         // Keys injected with this marker count as typed by the user (self-test only).
         readonly IntPtr testMarker;
         readonly Engine engine;
-        readonly Thread thread;
-        readonly ManualResetEvent started = new ManualResetEvent(false);
+        readonly Thread thread, mouseThread;
+        readonly ManualResetEvent started = new ManualResetEvent(false), mouseStarted = new ManualResetEvent(false);
+        volatile uint mouseThreadId;
+        // Set by the mouse thread on a click, taken by the keyboard thread.
+        volatile bool clicked;
+        // The fullscreen check of the window in front, and when it was made (null: not yet).
+        bool fullScreen;
+        int? fullScreenCheckedAt;
+        // The control that had the keyboard at the last key, and whether it is a password box.
+        IntPtr lastFocus;
+        bool lastFocusIsPassword;
         // Held in fields so the delegates are not garbage collected while hooked.
         readonly Native.HookProc keyProc, mouseProc;
         readonly byte[] keyState = new byte[256];
@@ -100,6 +110,7 @@ namespace KeyboardWriterHelper
             this.counters = counters;
             this.testMarker = testMarker;
             engine = new Engine(Lookup, myWords.Contains, myFixes.Get, Type, (Func<string, string, string, string>)spelling.PredictNext);
+            engine.Clipboard = Native.GetClipboardText;
             engine.Corrected += OnCorrected;
             engine.Undone += OnUndone;
             engine.Changed += delegate(string typed, string before, string now) { if (Changed != null) Changed(typed, before, now); };
@@ -119,12 +130,22 @@ namespace KeyboardWriterHelper
             started.WaitOne();
             if (startupError != null)
                 throw new InvalidOperationException("Could not install the keyboard hook: " + startupError.Message);
+
+            // The mouse hook has a thread of its own: on the keyboard thread the
+            // pointer would freeze whenever a key waits for a spelling answer.
+            mouseThread = new Thread(RunMouse);
+            mouseThread.Name = "Mouse";
+            mouseThread.IsBackground = true;
+            mouseThread.Start();
+            mouseStarted.WaitOne();
         }
 
         public void Dispose()
         {
             if (threadId != 0) Native.PostThreadMessage(threadId, Native.WM_QUIT, IntPtr.Zero, IntPtr.Zero);
+            if (mouseThreadId != 0) Native.PostThreadMessage(mouseThreadId, Native.WM_QUIT, IntPtr.Zero, IntPtr.Zero);
             thread.Join(2000);
+            if (mouseThread != null) mouseThread.Join(2000);
         }
 
         // Runs the whole correction path once before the hooks exist, so the first
@@ -150,7 +171,6 @@ namespace KeyboardWriterHelper
                 keyHook = Native.SetWindowsHookEx(Native.WH_KEYBOARD_LL, keyProc, module, 0);
                 if (keyHook == IntPtr.Zero)
                     throw new InvalidOperationException("Windows error " + Marshal.GetLastWin32Error());
-                mouseHook = Native.SetWindowsHookEx(Native.WH_MOUSE_LL, mouseProc, module, 0);
                 threadId = Native.GetCurrentThreadId();
             }
             catch (Exception ex) { startupError = ex; }
@@ -162,7 +182,23 @@ namespace KeyboardWriterHelper
             while (Native.GetMessage(out msg, IntPtr.Zero, 0, 0) > 0) { }
 
             Native.UnhookWindowsHookEx(keyHook);
-            if (mouseHook != IntPtr.Zero) Native.UnhookWindowsHookEx(mouseHook);
+        }
+
+        void RunMouse()
+        {
+            try
+            {
+                mouseHook = Native.SetWindowsHookEx(Native.WH_MOUSE_LL, mouseProc, Native.GetModuleHandle(null), 0);
+                mouseThreadId = Native.GetCurrentThreadId();
+            }
+            finally { mouseStarted.Set(); }
+            // Without it a click is simply not noticed; correction still works.
+            if (mouseHook == IntPtr.Zero) return;
+
+            Native.MSG msg;
+            while (Native.GetMessage(out msg, IntPtr.Zero, 0, 0) > 0) { }
+
+            Native.UnhookWindowsHookEx(mouseHook);
         }
 
         Suggestion Lookup(string word, string secondPrevious, string previous, bool cautious)
@@ -194,17 +230,33 @@ namespace KeyboardWriterHelper
             }
         }
 
+        // On the mouse thread. The engine belongs to the keyboard thread, so a
+        // click is only noted here and acted on at the next key (ClickBreak).
         IntPtr MouseProc(int nCode, IntPtr wParam, IntPtr lParam)
         {
             if (nCode >= 0)
             {
-                int msg = wParam.ToInt32();
+                long msg = wParam.ToInt64();
                 // The caret may now be in the middle of existing text ("walk|" + "ing"),
                 // so the next word is left alone, like after an arrow key.
                 if (msg == Native.WM_LBUTTONDOWN || msg == Native.WM_RBUTTONDOWN || msg == Native.WM_MBUTTONDOWN)
-                    engine.Break(false);
+                {
+                    clicked = true;
+                    // The pill hides at once; its handler only queues that on the UI thread.
+                    try { if (CandidateDismissed != null) CandidateDismissed(); }
+                    catch (Exception ex) { counters.Error(ex); }
+                }
             }
             return Native.CallNextHookEx(mouseHook, nCode, wParam, lParam);
+        }
+
+        // A click since the last key: forget the word being typed. True if there was one.
+        bool ClickBreak()
+        {
+            if (!clicked) return false;
+            clicked = false;
+            engine.Break(false);
+            return true;
         }
 
         IntPtr KeyProc(int nCode, IntPtr wParam, IntPtr lParam)
@@ -249,6 +301,8 @@ namespace KeyboardWriterHelper
         {
             int times = pendingNext;
             pendingNext = 0;
+            // Clicked somewhere since the fix: the caret may have moved away from it.
+            if (ClickBreak()) return;
             long begin = Stopwatch.GetTimestamp();
             try
             {
@@ -300,6 +354,7 @@ namespace KeyboardWriterHelper
 
         bool HandleKey(Native.KBDLLHOOKSTRUCT key)
         {
+            ClickBreak();
             if (!IsUserKey(key))
             {
                 // Text typed by another program (or us) is not the user's spelling.
@@ -354,14 +409,17 @@ namespace KeyboardWriterHelper
             engine.SmartCompose = settings.SmartCompose;
 
             IntPtr foreground = Native.GetForegroundWindow();
+            uint foregroundThread = Native.GetWindowThreadProcessId(foreground, IntPtr.Zero);
             if (foreground != lastForeground)
             {
                 lastForeground = foreground;
                 lastApp = Native.ProcessNameOf(foreground);
+                fullScreenCheckedAt = null;
                 engine.Break(true);
             }
 
-            if (repeat || excludedApps.Contains(lastApp) || uipiBlocked.Contains(foreground) || (settings.SkipFullscreenGames && Native.IsForegroundFullScreen(foreground)))
+            if (repeat || excludedApps.Contains(lastApp) || IsBlocked(foreground) || IsFullScreen(foreground) ||
+                IsPasswordBox(foregroundThread))
             {
                 engine.Break(false);
                 return false;
@@ -416,7 +474,7 @@ namespace KeyboardWriterHelper
                 keyState[Native.VK_MENU] = 0x80;
                 keyState[Native.VK_RMENU] = 0x80;
             }
-            IntPtr layout = Native.GetKeyboardLayout(Native.GetWindowThreadProcessId(foreground, IntPtr.Zero));
+            IntPtr layout = Native.GetKeyboardLayout(foregroundThread);
             spelling.UpdateLayout(layout);
             // Only English keyboards: other languages must not go through an English dictionary.
             if (((int)(layout.ToInt64() & 0x3FF)) != Native.LANG_ENGLISH)
@@ -433,6 +491,47 @@ namespace KeyboardWriterHelper
                 return false;
             }
             return engine.Char(keyChars[0]);
+        }
+
+        // Fullscreen games: checked when the window in front changes and then at
+        // most once a second, not on every key.
+        bool IsFullScreen(IntPtr foreground)
+        {
+            if (!settings.SkipFullscreenGames) return false;
+            int now = Environment.TickCount;
+            if (fullScreenCheckedAt == null || unchecked(now - fullScreenCheckedAt.Value) > 1000)
+            {
+                fullScreen = Native.IsForegroundFullScreen(foreground);
+                fullScreenCheckedAt = now;
+            }
+            return fullScreen;
+        }
+
+        // A window SendInput could not type into. Its handle may later belong to
+        // another window, so the process must still be the same one.
+        bool IsBlocked(IntPtr window)
+        {
+            uint process;
+            if (!uipiBlocked.TryGetValue(window, out process)) return false;
+            if (Native.ProcessIdOf(window) == process) return true;
+            uipiBlocked.Remove(window);
+            return false;
+        }
+
+        // The control with the keyboard is a password box. Win32 and WinForms
+        // edit controls say so; browsers and WPF do not. Looked up again only
+        // when the focus moves.
+        bool IsPasswordBox(uint foregroundThread)
+        {
+            Native.GUITHREADINFO gui = new Native.GUITHREADINFO();
+            gui.cbSize = Native.GuiThreadInfoSize;
+            if (!Native.GetGUIThreadInfo(foregroundThread, ref gui)) return false;
+            if (gui.hwndFocus != lastFocus)
+            {
+                lastFocus = gui.hwndFocus;
+                lastFocusIsPassword = Native.IsPasswordEdit(gui.hwndFocus);
+            }
+            return lastFocusIsPassword;
         }
 
         // Engine output: erase the misspelled word and type the replacement.
@@ -467,7 +566,7 @@ namespace KeyboardWriterHelper
                 if (error == 5 || error == 0)
                 {
                     IntPtr fg = Native.GetForegroundWindow();
-                    if (fg != IntPtr.Zero) uipiBlocked.Add(fg);
+                    if (fg != IntPtr.Zero) uipiBlocked[fg] = Native.ProcessIdOf(fg);
                 }
                 engine.Break(false);
             }

@@ -115,6 +115,14 @@ namespace KeyboardWriterHelper
             finally { CloseHandle(process); }
         }
 
+        // The id of the process that owns a window, or 0.
+        public static uint ProcessIdOf(IntPtr window)
+        {
+            uint pid;
+            GetWindowThreadProcessId(window, out pid);
+            return pid;
+        }
+
         [StructLayout(LayoutKind.Sequential)]
         public struct RECT { public int Left, Top, Right, Bottom; }
 
@@ -135,8 +143,25 @@ namespace KeyboardWriterHelper
             public RECT rcCaret;
         }
 
+        public static readonly int GuiThreadInfoSize = Marshal.SizeOf(typeof(GUITHREADINFO));
+
         [DllImport("user32.dll")]
         public static extern bool GetGUIThreadInfo(uint idThread, ref GUITHREADINFO lpgui);
+
+        const int ES_PASSWORD = 0x20;
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        static extern int GetClassName(IntPtr hWnd, StringBuilder name, int maxCount);
+
+        // An edit control that hides what is typed in it (ES_PASSWORD).
+        public static bool IsPasswordEdit(IntPtr window)
+        {
+            if (window == IntPtr.Zero) return false;
+            StringBuilder name = new StringBuilder(64);
+            if (GetClassName(window, name, name.Capacity) == 0) return false;
+            return name.ToString().IndexOf("edit", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                   (GetWindowLong(window, GWL_STYLE) & ES_PASSWORD) != 0;
+        }
 
         [DllImport("user32.dll")]
         public static extern bool ClientToScreen(IntPtr hWnd, ref POINT lpPoint);

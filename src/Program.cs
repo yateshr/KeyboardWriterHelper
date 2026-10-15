@@ -56,6 +56,9 @@ namespace KeyboardWriterHelper
                     return 0;
                 }
                 Application.EnableVisualStyles();
+                // Every key waits for the keyboard thread; avoid long blocking
+                // garbage collections while it runs.
+                System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.SustainedLowLatency;
                 try
                 {
                     Application.Run(new TrayApp(
@@ -100,6 +103,9 @@ namespace KeyboardWriterHelper
                         Screen.Append(typed);
                     },
                     (Func<string, string, string, string>)speller.Ranker.PredictNext);
+                // Snippets give the same text on every run.
+                Engine.Clock = delegate { return new DateTime(2026, 1, 2, 3, 4, 0); };
+                Engine.Clipboard = delegate { return "line one\r\nline two\ttab"; };
             }
 
             // Types the text and returns what is on screen. {BS} stands for
