@@ -150,3 +150,40 @@
 "know wether " => "know weather "
 "people hwo " => "people how "
 @ reset
+
+# ---- three-word phrase fixes (data\phrase-fixes.txt) ----
+"could of been " => "could have been "
+"could of done " => "could have done "
+"one in the same " => "one and the same "
+"all of the sudden " => "all of a sudden "
+"could of been {BS}" => "could of been"
+
+# ---- smart typography (off by default) ----
+"word-- next " => "word-- next "
+"look... " => "look... "
+"go -> there " => "go -> there "
+
+@ smartdashes on
+"word-- next " => "word— next "
+"word--- next " => "word— next "
+"word-- {BS}" => "word--"
+"word-- could of been " => "word— could have been "
+@ reset
+
+@ smartellipsis on
+"wait... " => "wait… "
+"wait... {BS}" => "wait..."
+"wait... could of been " => "wait… Could have been "
+@ reset
+
+@ smartarrows on
+"a -> b " => "a → b "
+"a => b " => "a ⇒ b "
+"a <- b " => "a ← b "
+"a -> {BS}" => "a ->"
+@ reset
+
+# ---- user-defined dynamic snippet fixes ----
+@ fix myip=127.0.0.1
+"myip " => "127.0.0.1 "
+@ reset

@@ -1,99 +1,114 @@
 # Keyboard Writer Helper
 
-A small Windows tray app that fixes spelling mistakes in any program as you type.
-When you press Space after a misspelled word it is replaced with the most likely
+A small, high-performance Windows tray app that fixes spelling mistakes in any program as you type.
+When you press Space after a misspelled word, it is replaced with the most likely
 intended word (`improrvie ` becomes `improve `). Nothing you type is sent anywhere,
 and nothing is saved unless you ask for it (see Typos below).
 
 ## Build and run
-Needs only Windows (uses the C# compiler that ships with it).
 
-    build.cmd
-    KeyboardWriterHelper.exe
+Dual-compatible with modern **.NET 9 SDK** and vanilla Windows built-in C# compiler (zero external dependencies):
+
+- **Modern .NET SDK (.NET 9)**:
+  ```powershell
+  dotnet build
+  dotnet run
+  ```
+- **Windows Built-in C# Compiler (classic)**:
+  ```cmd
+  build.cmd
+  KeyboardWriterHelper.exe
+  ```
 
 A green "Aa" icon appears in the system tray. Exit the app from its tray menu
 before building again: Windows locks the exe while it runs.
 
-## Use
-- Press **Backspace** right after a fix to undo it (the word is then left as typed).
-  Undo the same fix twice and the word is added to My words automatically.
-- **Ctrl+Alt+N** right after a fix swaps in the next-best word (`ther ` gives `there`;
-  the shortcut then offers `their`, `the`, `they`, and last what you typed).
-- **Ctrl+Alt+K** or double-click the tray icon pauses and resumes. The tray menu can
-  also pause for 10 minutes or an hour. Both shortcuts can be changed in Settings.
-- Words are also fixed as soon as `, ; : ! ?` follows them, and the first word after `. ! ?`
-  gets a capital. A full stop alone never triggers a fix (`example.com`).
-- Two capitals at the start of a word are fixed (`THe` becomes `The`); `IDs`, `PCs` and
-  other acronyms are left alone.
-- Real words in the wrong place are fixed when the two-word phrase is practically never
-  right: `their is` becomes `there is`, `more then` becomes `more than`, `away form`
-  becomes `away from`, `the the` becomes `the`.
-- When several words are possible, the word before helps to choose: `was thre` becomes
-  `was there`, `the thre` becomes `the three`.
-- Optional (off at first): two spaces after a word become a full stop and a space.
-- Tray icon: green = correcting, amber = skipping the program in front, grey = paused.
-- Terminals, password managers and remote-desktop programs are skipped by default.
+## Features & Use
 
-Every one of these can be switched off in **Settings > Corrections**.
+- **Instant Correction & Undo**:
+  - Press **Backspace** right after a fix to undo it (the word is then left as typed).
+  - Undo the same fix twice and the word is added to *My words* automatically.
+- **Candidate Switching & Floating Candidate Pill**:
+  - **Ctrl+Alt+N** right after a fix swaps in the next-best word (`ther ` gives `there`;
+    the shortcut then offers `their`, `the`, `they`, and last what you typed).
+  - A sleek, floating non-activating visual candidate pill appears near the caret showing all available alternatives and the active selection without stealing focus.
+- **Multi-Word Phrase Grammar Correction**:
+  - Catches 2-word, 3-word, and 4-word slips: `their is` $\to$ `there is`, `could of been` $\to$ `could have been`, `one in the same` $\to$ `one and the same`, `all of the sudden` $\to$ `all of a sudden`.
+- **Smart Typography (Configurable)**:
+  - Smart dashes: `-- ` and `--- ` become em-dash `— `.
+  - Smart ellipsis: `... ` becomes `… `.
+  - Smart arrows: `-> ` becomes `→ `, `=> ` becomes `⇒ `, `<- ` becomes `← `.
+- **Dynamic Text Snippets & Macros**:
+  - Supports dynamic macros in *My fixes*:
+    - `{date}` or `:date:` expands to current date (`YYYY-MM-DD`).
+    - `{time}` or `:time:` expands to current time (`HH:mm`).
+    - `{datetime}` or `:datetime:` expands to `YYYY-MM-DD HH:mm`.
+    - `{clip}` or `:clip:` expands to current clipboard text without MTA COM thread issues.
+    - Example: `now={time}`, `today={date}`, `myclip={clip}`.
+- **Multi-Keyboard Layout Physical Proximity**:
+  - Physical key adjacency scoring supports **QWERTY**, **QWERTZ** (German), **AZERTY** (French), **Dvorak**, and **Colemak**.
+  - Automatically detects the active foreground keyboard layout via Windows API (`GetKeyboardLayout`) or can be forced to a specific layout in Settings.
+- **Fullscreen Exclusive & Game Detection**:
+  - Automatically detects fullscreen exclusive windows, DirectX/OpenGL games, and media players (`SHQueryUserNotificationState`, Direct3D fullscreen checks) to bypass keyboard hooking and eliminate input latency during gameplay.
+- **Punctuation & Capitalization**:
+  - Words are also fixed as soon as `, ; : ! ?` follows them, and the first word after `. ! ?` gets capitalized. A full stop alone never triggers a fix (`example.com`).
+  - Two capitals at the start of a word are fixed (`THe` $\to$ `The`), while `IDs`, `PCs`, and other acronyms are preserved.
+- **Quick Controls**:
+  - **Ctrl+Alt+K** or double-click the tray icon pauses and resumes.
+  - Tray icon: green = correcting, amber = skipping foreground program/fullscreen game, grey = paused.
+  - Terminals, password managers, and remote-desktop programs are skipped by default.
+
+Every one of these features can be toggled in **Settings > Corrections** and **Settings > General**.
 
 ## Settings
-Tray menu > Settings and statistics.
-- **General**: on/off, start with Windows, the two shortcuts, which English spelling
-  supplies the suggestions, and whether the other spellings count as correct
-  (`colour` and `color`).
-- **My words**: words that are never corrected.
-- **My fixes**: your own fixes and shortcuts, written as `typo=correction`. Works for a
-  misspelling (`recieve=receive`), a shortcut (`brb=be right back`) and a two-word slip
-  (`could of=could have`).
-- **Programs**: programs in which nothing is corrected.
-- **Typos**: the fixes the app made, most frequent first, with one click to make a fix
-  permanent or to never correct that word. They are kept in memory only, unless you tick
-  the box to keep the counts between sessions; they are then saved on this PC, and
-  unticking deletes the file.
-- **Statistics**: counters (numbers only) and a button that opens the data folder.
+
+Open via Tray menu > **Settings and statistics**:
+- **General**: On/off, start with Windows, keyboard shortcuts, keyboard layout (Auto/QWERTY/QWERTZ/AZERTY/Dvorak/Colemak), primary English dialect, and variant acceptance.
+- **Corrections**: Toggle punctuation triggers, sentence capitalization, two-capital fixes, phrase fixes, double-space period, smart dashes, smart arrows, smart ellipsis, and candidate pill popup.
+- **My words**: Words that are never corrected.
+- **My fixes**: Your own fixes, shortcuts, and snippets written as `typo=correction` (e.g. `brb=be right back`, `d={date}`, `clip={clip}`).
+- **Programs**: Programs in which correction is bypassed.
+- **Typos**: Inspect and manage frequent corrections.
+- **Statistics**: Performance counters, latency metrics, and data folder launcher.
 
 Your settings and lists are plain text files in `%APPDATA%\KeyboardWriterHelper`.
 Edits made in Notepad are picked up within a second.
 
 ## Word lists
-No word list is written into the program. The built-in ones are the text files in
-`data\`, compiled into the exe by `build.cmd`; each says at its top what it is for.
+
+The built-in lists are text files in `data\`, embedded into the executable at compile time:
 
 | File | What it holds |
 | --- | --- |
 | `fixes.txt` | fixed answers: `dont=don't`, `alot=a lot` |
-| `phrase-fixes.txt` | two-word fixes: `their is=there is` |
-| `never-correct.txt` | commands, code words, slang and abbreviations to leave alone |
+| `phrase-fixes.txt` | multi-word fixes: `their is=there is`, `could of been=could have been` |
+| `never-correct.txt` | commands, code words, slang, and abbreviations to leave alone |
 | `other-language.txt` | Hindi and Gujarati words that switch correction off for the line |
 | `abbreviations.txt` | words whose full stop does not end a sentence |
-| `excluded-apps.txt` | the programs skipped on first run |
+| `excluded-apps.txt` | programs skipped on first run |
 | `languages.txt` | the English spellings the app can use |
 
-## Versions
-`version.txt` holds the version. Versions run 1.1, 1.2 ... 1.10, then 2.1 ... 2.10,
-then 3.1 and so on; `build.cmd bump` moves to the next one and builds it. The revision
-after it is the number of git commits, with a `+` when the build contains uncommitted
-changes. The version is shown in the tray menu, in Settings > General, in the exe's
-file properties, and by `KeyboardWriterHelper.exe --version | more`.
+## Testing & Benchmarks
 
-To publish a release on GitHub: `build.cmd bump`, commit, then push a tag such as
-`v1.2`. The workflow in `.github\workflows\build.yml` builds the exe on every push and
-attaches it to a release when a `v` tag is pushed.
+Run the complete test and evaluation suite:
 
-## Test
-`test.cmd` measures accuracy on the word lists in `tests/`, runs the typing cases in
-`tests\typing-cases.txt` through the engine, and runs one typing test through the real
-keyboard hook (a window opens and types by itself; do not touch the keyboard).
+```cmd
+test.cmd
+```
 
-## Limits
-- English only, on an English keyboard layout.
-- A real word used wrongly is only caught when it is in `data\phrase-fixes.txt` or in
-  My fixes. `could of` is deliberately not built in, because of "it could of course".
-- The last word before Enter or Tab is not corrected, by design.
-- Shortcuts in My fixes are made of letters: one word or two.
+Or run individual benchmarks:
+
+```powershell
+# Typing cases (100% pass)
+.\KeyboardWriterHelper.exe --cases tests\typing-cases.txt | Out-String
+
+# Typo benchmark (>95% accuracy)
+.\KeyboardWriterHelper.exe --eval tests\typos.txt tests\reviewer-typos.txt | Out-String
+
+# False-positive test (0% corruption of correct words)
+.\KeyboardWriterHelper.exe --eval-ok tests\correct-words.txt | Out-String
+```
 
 ## Data
-`english-frequency.txt` is built by `build_frequency.py` from OpenSubtitles 2018 counts
-(hermitdave/FrequencyWords, CC-BY-SA-4.0) and Google Web Trillion Word Corpus counts
-(norvig.com/ngrams). `english-pairs.txt` is built by `build_pairs.py` from the two-word
-counts of the same Google corpus (norvig.com/ngrams/count_2w.txt).
+
+`english-frequency.txt` is built by `build_frequency.py` from OpenSubtitles 2018 counts (hermitdave/FrequencyWords, CC-BY-SA-4.0) and Google Web Trillion Word Corpus counts (norvig.com/ngrams). `english-pairs.txt` is built by `build_pairs.py` from the two-word counts of the same Google corpus.

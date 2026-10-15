@@ -159,3 +159,26 @@ trail period=trial period
 
 # "fro" is fixed to "for" (fixes.txt), except here
 and fro=and fro
+
+# Three-word phrases: unambiguous grammatical slips
+could of been=could have been
+could of done=could have done
+could of had=could have had
+could of gone=could have gone
+could of seen=could have seen
+should of been=should have been
+should of done=should have done
+should of had=should have had
+should of gone=should have gone
+should of seen=should have seen
+would of been=would have been
+would of done=would have done
+would of had=would have had
+would of gone=would have gone
+would of seen=would have seen
+might of been=might have been
+must of been=must have been
+one in the same=one and the same
+for all intensive purposes=for all intents and purposes
+all of the sudden=all of a sudden
+piece of mind=peace of mind

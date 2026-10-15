@@ -1,2 +1,5 @@
 # Built program: rebuild with build.cmd
 *.exe
+bin/
+obj/
+*.user

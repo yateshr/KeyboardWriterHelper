@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>disable</Nullable>
+    <RootNamespace>KeyboardWriterHelper</RootNamespace>
+    <AssemblyName>KeyboardWriterHelper</AssemblyName>
+    <StartupObject>KeyboardWriterHelper.Program</StartupObject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="english-frequency.txt">
+      <LogicalName>english-frequency.txt</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="english-pairs.txt">
+      <LogicalName>english-pairs.txt</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="data\*.txt">
+      <LogicalName>%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+</Project>
