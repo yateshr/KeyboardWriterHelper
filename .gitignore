@@ -2,4 +2,7 @@
 *.exe
 bin/
 obj/
+dist/
+artifacts/
+release-dist/
 *.user

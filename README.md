@@ -109,6 +109,12 @@ Or run individual benchmarks:
 .\KeyboardWriterHelper.exe --eval-ok tests\correct-words.txt | Out-String
 ```
 
+## CI/CD & Releases
+
+Automated workflows are managed via GitHub Actions:
+- **CI Workflow (`.github/workflows/ci.yml`)**: Triggered on pushes and pull requests to `main`. Builds dual targets (.NET 9 and .NET Framework 4.0), runs the full test suite, and archives build artifacts.
+- **Release Workflow (`.github/workflows/release.yml`)**: Triggered on version tags (e.g. `v1.2`) or manually via `workflow_dispatch`. Builds standalone binaries, bundles ZIP distributions, generates SHA-256 checksums, and publishes GitHub releases automatically.
+
 ## Data
 
 `english-frequency.txt` is built by `build_frequency.py` from OpenSubtitles 2018 counts (hermitdave/FrequencyWords, CC-BY-SA-4.0) and Google Web Trillion Word Corpus counts (norvig.com/ngrams). `english-pairs.txt` is built by `build_pairs.py` from the two-word counts of the same Google corpus.

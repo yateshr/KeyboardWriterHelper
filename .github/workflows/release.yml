@@ -1,0 +1,91 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag or version name to publish (e.g. v1.2)'
+        required: false
+        default: ''
+
+jobs:
+  publish-release:
+    name: Publish GitHub Release
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Build with .NET Framework 4.0 (csc.exe)
+        shell: cmd
+        run: build.cmd
+
+      - name: Publish .NET 9 Standalone Single-File
+        run: dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o dist/net9-x64
+
+      - name: Run Full Test Suite
+        shell: cmd
+        run: test.cmd
+
+      - name: Package Release Assets & Checksums
+        shell: pwsh
+        run: |
+          $tag = "${{ github.event.inputs.tag_name }}"
+          if (-not $tag) { $tag = "${{ github.ref_name }}" }
+          if (-not $tag -or $tag -eq "main") { $tag = "v" + (Get-Content version.txt).Trim() }
+
+          Write-Host "Packaging release for tag: $tag"
+          New-Item -ItemType Directory -Force -Path release-dist | Out-Null
+
+          # Standalone executables
+          Copy-Item KeyboardWriterHelper.exe -Destination release-dist/KeyboardWriterHelper-net40.exe
+          Copy-Item dist/net9-x64/KeyboardWriterHelper.exe -Destination release-dist/KeyboardWriterHelper-net9-x64.exe
+
+          # Package Zip 1: Classic .NET 4.0 bundle
+          $net40Folder = "release-dist/KeyboardWriterHelper-$tag-net40"
+          New-Item -ItemType Directory -Force -Path $net40Folder | Out-Null
+          Copy-Item KeyboardWriterHelper.exe -Destination "$net40Folder/KeyboardWriterHelper.exe"
+          Copy-Item README.md -Destination "$net40Folder/README.md"
+          Copy-Item ROADMAP.md -Destination "$net40Folder/ROADMAP.md"
+          Compress-Archive -Path "$net40Folder/*" -DestinationPath "release-dist/KeyboardWriterHelper-$tag-net40.zip" -Force
+          Remove-Item -Recurse -Force $net40Folder
+
+          # Package Zip 2: Modern .NET 9 bundle
+          $net9Folder = "release-dist/KeyboardWriterHelper-$tag-win-x64"
+          New-Item -ItemType Directory -Force -Path $net9Folder | Out-Null
+          Copy-Item dist/net9-x64/KeyboardWriterHelper.exe -Destination "$net9Folder/KeyboardWriterHelper.exe"
+          Copy-Item README.md -Destination "$net9Folder/README.md"
+          Copy-Item ROADMAP.md -Destination "$net9Folder/ROADMAP.md"
+          Compress-Archive -Path "$net9Folder/*" -DestinationPath "release-dist/KeyboardWriterHelper-$tag-win-x64.zip" -Force
+          Remove-Item -Recurse -Force $net9Folder
+
+          # Compute SHA-256 Checksums
+          Set-Location release-dist
+          Get-FileHash -Algorithm SHA256 (Get-ChildItem -File) | ForEach-Object { "{0}  {1}" -f $_.Hash, (Split-Path $_.Path -Leaf) } | Set-Content SHA256SUMS.txt
+          Get-Content SHA256SUMS.txt
+          Set-Location ..
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.event.inputs.tag_name }}"
+          if (-not $tag) { $tag = "${{ github.ref_name }}" }
+          if (-not $tag -or $tag -eq "main") { $tag = "v" + (Get-Content version.txt).Trim() }
+
+          $assets = Get-ChildItem -Path release-dist | ForEach-Object { $_.FullName }
+          gh release create "$tag" $assets --title "Keyboard Writer Helper $tag" --generate-notes

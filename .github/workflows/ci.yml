@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: Build & Test (Windows)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Build with .NET 9
+        run: dotnet build -c Release
+
+      - name: Build with .NET Framework 4.0 (csc.exe)
+        shell: cmd
+        run: build.cmd
+
+      - name: Verify Version Output
+        shell: pwsh
+        run: .\KeyboardWriterHelper.exe --version | Out-Host
+
+      - name: Run Full Test Suite
+        shell: cmd
+        run: test.cmd
+
+      - name: Publish .NET 9 Standalone Single-File
+        run: dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o dist/net9-x64
+
+      - name: Prepare Artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts
+          Copy-Item KeyboardWriterHelper.exe -Destination artifacts/KeyboardWriterHelper-net40.exe
+          Copy-Item dist/net9-x64/KeyboardWriterHelper.exe -Destination artifacts/KeyboardWriterHelper-net9-x64.exe
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: KeyboardWriterHelper-binaries
+          path: artifacts/
