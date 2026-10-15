@@ -249,6 +249,8 @@ namespace KeyboardWriterHelper
 
         {
 
+            if (c == '\u2018' || c == '\u2019') c = '\'';
+
             if (undo != null && CandidateDismissed != null) CandidateDismissed();
 
             undo = null;

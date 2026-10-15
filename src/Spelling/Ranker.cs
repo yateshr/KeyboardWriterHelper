@@ -215,6 +215,38 @@ namespace KeyboardWriterHelper
 
     
 
+        public void UpdateActiveLayout(IntPtr layoutHandle)
+
+        {
+
+            if (Layout == KeyboardLayoutKind.Auto && layoutHandle != IntPtr.Zero)
+
+            {
+
+                KeyboardLayoutKind detected = DetectLayout(layoutHandle);
+
+                switch (detected)
+
+                {
+
+                    case KeyboardLayoutKind.Qwertz: currentNear = NearQwertz; break;
+
+                    case KeyboardLayoutKind.Azerty: currentNear = NearAzerty; break;
+
+                    case KeyboardLayoutKind.Dvorak: currentNear = NearDvorak; break;
+
+                    case KeyboardLayoutKind.Colemak: currentNear = NearColemak; break;
+
+                    default: currentNear = NearQwerty; break;
+
+                }
+
+            }
+
+        }
+
+    
+
         readonly Dictionary<string, float> logByWord = new Dictionary<string, float>(StringComparer.Ordinal);
 
         // Plain a-z words only, used to propose candidates Windows did not offer.
@@ -415,7 +447,7 @@ namespace KeyboardWriterHelper
 
             if (string.IsNullOrEmpty(typed)) return null;
 
-            string lower = typed.ToLowerInvariant();
+            string lower = typed.ToLowerInvariant().Replace('\u2018', '\'').Replace('\u2019', '\'');
 
             if (lower.Length > MaxLength) return null;
 
@@ -431,7 +463,7 @@ namespace KeyboardWriterHelper
 
                 string candidate = windows[i];
 
-                string candidateLower = candidate.ToLowerInvariant();
+                string candidateLower = candidate.ToLowerInvariant().Replace('\u2018', '\'').Replace('\u2019', '\'');
 
                 if (candidateLower.Length == 0 || candidateLower.Length > MaxLength || !seen.Add(candidateLower)) continue;
 
@@ -595,9 +627,13 @@ namespace KeyboardWriterHelper
 
                 // Unsure about a short or capitalised word: only an obvious slip
 
-                // (two letters swapped, a doubled letter) of a very common word.
+                // (two letters swapped, a doubled letter) or high-confidence single proximity/vowel substitution.
 
-                if (!certain && (winner.Cost > CautiousMaxCost || commonness < CautiousMinLog)) return null;
+                bool allowedCost = winner.Cost <= CautiousMaxCost ||
+
+                    (winner.Cost <= 0.85 && commonness >= CautiousMinLog && LogFrequency(lower) <= commonness - 2.5);
+
+                if (!certain && (!allowedCost || commonness < CautiousMinLog)) return null;
 
             }
 
@@ -681,11 +717,43 @@ namespace KeyboardWriterHelper
 
         {
 
-            string w = word.Replace("our", "or").Replace("ise", "ize").Replace("isi", "izi").Replace("isa", "iza")
+            string w = word;
 
-                           .Replace("yse", "yze").Replace("ysi", "yzi").Replace("ll", "l").Replace("ogue", "og")
+            if (w.EndsWith("our") && w.Length > 4 && w != "scour" && w != "flour")
 
-                           .Replace("ence", "ense").Replace("ae", "e").Replace("grey", "gray");
+                w = w.Substring(0, w.Length - 3) + "or";
+
+            else if (w.EndsWith("ours") && w.Length > 5 && w != "scours" && w != "flours")
+
+                w = w.Substring(0, w.Length - 4) + "ors";
+
+            else if (w.EndsWith("oured") && w.Length > 6)
+
+                w = w.Substring(0, w.Length - 5) + "ored";
+
+            else if (w.EndsWith("ouring") && w.Length > 7)
+
+                w = w.Substring(0, w.Length - 6) + "oring";
+
+            w = w.Replace("ise", "ize").Replace("isi", "izi").Replace("isa", "iza")
+
+                 .Replace("yse", "yze").Replace("ysi", "yzi");
+
+            w = w.Replace("elled", "eled").Replace("elling", "eling").Replace("eller", "eler").Replace("ellor", "elor")
+
+                 .Replace("alled", "aled").Replace("alling", "aling")
+
+                 .Replace("llery", "lry").Replace("skilful", "skillful");
+
+            if (w.EndsWith("ogue")) w = w.Substring(0, w.Length - 4) + "og";
+
+            else if (w.EndsWith("ogues")) w = w.Substring(0, w.Length - 5) + "ogs";
+
+            if (w == "defence" || w == "offence" || w == "pretence" || w == "licence")
+
+                w = w.Substring(0, w.Length - 2) + "se";
+
+            w = w.Replace("ae", "e").Replace("oe", "e").Replace("grey", "gray");
 
             if (w.EndsWith("tre") || w.EndsWith("bre")) w = w.Substring(0, w.Length - 2) + "er";
 
@@ -891,9 +959,13 @@ namespace KeyboardWriterHelper
 
             if (x == y) return 0;
 
+            if (BaseChar(x) == BaseChar(y)) return 0.2;
+
             if (IsVowel(x) && IsVowel(y)) return VowelSwap;
 
-            if (x >= 'a' && x <= 'z' && y >= 'a' && y <= 'z' && currentNear[x - 'a', y - 'a']) return NearbySwap;
+            char bx = BaseChar(x), by = BaseChar(y);
+
+            if (bx >= 'a' && bx <= 'z' && by >= 'a' && by <= 'z' && currentNear[bx - 'a', by - 'a']) return NearbySwap;
 
             return 1.0;
 
@@ -901,7 +973,55 @@ namespace KeyboardWriterHelper
 
     
 
-        static bool IsVowel(char c) { return c == 'a' || c == 'e' || c == 'i' || c == 'o' || c == 'u'; }
+        static char BaseChar(char c)
+
+        {
+
+            if (c >= 'a' && c <= 'z') return c;
+
+            switch (c)
+
+            {
+
+                case 'á': case 'à': case 'ä': case 'â': return 'a';
+
+                case 'é': case 'è': case 'ë': case 'ê': return 'e';
+
+                case 'í': case 'ì': case 'ï': case 'î': return 'i';
+
+                case 'ó': case 'ò': case 'ö': case 'ô': return 'o';
+
+                case 'ú': case 'ù': case 'ü': case 'û': return 'u';
+
+                case 'ç': return 'c';
+
+                case 'ñ': return 'n';
+
+                default: return c;
+
+            }
+
+        }
+
+    
+
+        static bool IsVowel(char c)
+
+        {
+
+            return c == 'a' || c == 'e' || c == 'i' || c == 'o' || c == 'u' ||
+
+                   c == 'á' || c == 'à' || c == 'ä' || c == 'â' ||
+
+                   c == 'é' || c == 'è' || c == 'ë' || c == 'ê' ||
+
+                   c == 'í' || c == 'ì' || c == 'ï' || c == 'î' ||
+
+                   c == 'ó' || c == 'ò' || c == 'ö' || c == 'ô' ||
+
+                   c == 'ú' || c == 'ù' || c == 'ü' || c == 'û';
+
+        }
 
     
 

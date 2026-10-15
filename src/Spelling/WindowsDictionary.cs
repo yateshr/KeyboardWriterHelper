@@ -105,7 +105,7 @@ namespace KeyboardWriterHelper
 
     
 
-    sealed class WindowsDictionary
+    sealed class WindowsDictionary : IDisposable
 
     {
 
@@ -141,39 +141,87 @@ namespace KeyboardWriterHelper
 
             ISpellCheckerFactory factory = (ISpellCheckerFactory)new SpellCheckerFactoryClass();
 
-            List<string> tags = new List<string>();
-
-            foreach (string tag in Data.Lines("languages.txt"))
-
-                if (factory.IsSupported(tag)) tags.Add(tag);
-
-            if (tags.Count == 0)
-
-                throw new InvalidOperationException("No English spell-check dictionary is installed in Windows.");
-
-            Installed = tags.ToArray();
-
-    
-
-            int chosen = tags.FindIndex(delegate(string tag) { return string.Equals(tag, main, StringComparison.OrdinalIgnoreCase); });
-
-            if (chosen > 0)
+            try
 
             {
 
-                string tag = tags[chosen];
+                List<string> tags = new List<string>();
 
-                tags.RemoveAt(chosen);
+                foreach (string tag in Data.Lines("languages.txt"))
 
-                tags.Insert(0, tag);
+                    if (factory.IsSupported(tag)) tags.Add(tag);
+
+                if (tags.Count == 0)
+
+                    throw new InvalidOperationException("No English spell-check dictionary is installed in Windows.");
+
+                Installed = tags.ToArray();
+
+    
+
+                int chosen = tags.FindIndex(delegate(string tag) { return string.Equals(tag, main, StringComparison.OrdinalIgnoreCase); });
+
+                if (chosen > 0)
+
+                {
+
+                    string tag = tags[chosen];
+
+                    tags.RemoveAt(chosen);
+
+                    tags.Insert(0, tag);
+
+                }
+
+                if (!others) tags.RemoveRange(1, tags.Count - 1);
+
+                foreach (string tag in tags) checkers.Add(factory.CreateSpellChecker(tag));
+
+                Languages = string.Join(", ", tags.ToArray());
 
             }
 
-            if (!others) tags.RemoveRange(1, tags.Count - 1);
+            finally
 
-            foreach (string tag in tags) checkers.Add(factory.CreateSpellChecker(tag));
+            {
 
-            Languages = string.Join(", ", tags.ToArray());
+                if (factory != null)
+
+                {
+
+                    try { Marshal.ReleaseComObject(factory); }
+
+                    catch { }
+
+                }
+
+            }
+
+        }
+
+    
+
+        public void Dispose()
+
+        {
+
+            foreach (ISpellChecker checker in checkers)
+
+            {
+
+                if (checker != null)
+
+                {
+
+                    try { Marshal.ReleaseComObject(checker); }
+
+                    catch { }
+
+                }
+
+            }
+
+            checkers.Clear();
 
         }
 

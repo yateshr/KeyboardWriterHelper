@@ -782,6 +782,8 @@ namespace KeyboardWriterHelper
 
             IntPtr layout = Native.GetKeyboardLayout(Native.GetWindowThreadProcessId(foreground, IntPtr.Zero));
 
+            spelling.UpdateLayout(layout);
+
             // Only English keyboards: other languages must not go through an English dictionary.
 
             if (((int)(layout.ToInt64() & 0x3FF)) != Native.LANG_ENGLISH)

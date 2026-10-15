@@ -89,26 +89,23 @@
 
 ## 2. High Priority Architectural & Reliability Flaws (P1)
 
-### [HIGH-01] COM Native Leaks in Windows Spell Checker
-- **Location**: `src/Spelling/WindowsDictionary.cs:120, 142, 174`
+### [HIGH-01] COM Native Leaks in Windows Spell Checker [RESOLVED]
+- **Location**: `src/Spelling/WindowsDictionary.cs`, `src/Spelling/Speller.cs`, `src/UI/TrayApp.cs`
 - **Problem**: `ISpellCheckerFactory` is instantiated via RCW without `Marshal.ReleaseComObject`. `WindowsDictionary` does not implement `IDisposable`, leaving all native `ISpellChecker` instances orphaned upon language changes or dictionary reloads.
 - **Impact**: Native heap memory leaks and locked registry/lexicon handles during long-running sessions.
-- **Fix**: Implement `IDisposable` on `WindowsDictionary`, `Speller`, and `SpellService`; explicitly invoke `Marshal.ReleaseComObject` in reverse instantiation order.
+- **Fix**: Implement `IDisposable` on `WindowsDictionary`, `Speller`, and `SpellService`; explicitly invoke `Marshal.ReleaseComObject` in reverse instantiation order and dispose instances on shutdown and reconfiguration.
 
-### [HIGH-02] Dead Code: Keyboard Layout Auto-Detection Never Runs
-- **Location**: `src/Spelling/Ranker.cs:198-214` & `src/Hook/Corrector.cs`
-- **Problem**: `Ranker.DetectLayout(IntPtr hkl)` was authored to recognize QWERTZ, AZERTY, Dvorak, and Colemak from active keyboard layouts, but is **never invoked anywhere in the codebase**. In `Ranker.SetLayout`, the default `Layout.Auto` branch simply executes `currentNear = NearQwerty; break;`.
-- **Impact**: The advertised multi-layout typing proximity feature is non-functional; QWERTY adjacency is always used unless manually forced by user settings.
-- **Fix**: In `Corrector.cs`, track the foreground window's keyboard layout handle via `Native.GetKeyboardLayout(GetWindowThreadProcessId(fg, IntPtr.Zero))` and pass it to `Ranker.DetectLayout()`.
+### [HIGH-02] Dead Code: Keyboard Layout Auto-Detection Never Runs [RESOLVED]
+- **Location**: `src/Spelling/Ranker.cs` & `src/Hook/Corrector.cs` & `src/Spelling/Speller.cs`
+- **Problem**: `Ranker.DetectLayout(IntPtr hkl)` was authored to recognize QWERTZ, AZERTY, Dvorak, and Colemak from active keyboard layouts, but was never invoked.
+- **Impact**: The advertised multi-layout typing proximity feature was non-functional; QWERTY adjacency was always used unless manually forced by user settings.
+- **Fix**: In `Corrector.cs`, read the foreground window's keyboard layout handle via `Native.GetKeyboardLayout` and forward it via `SpellService.UpdateLayout(layout)` to `Ranker.UpdateActiveLayout(layout)`.
 
-### [HIGH-03] Single-Character Substitution Typos in Short Words Always Rejected
-- **Location**: `src/Spelling/Ranker.cs:589, 887-890` & `src/Engine/Engine.cs:830`
-- **Problem**: `Engine.cs` marks all words with `Length <= 3` as `cautious = true`. In `Ranker.Best`, cautious mode requires `winner.Cost <= CautiousMaxCost` (0.6). However, in `Ranker.Cost`:
-  - Keyboard proximity swap = 0.8
-  - Vowel swap = 0.7
-  - Regular substitution = 1.0
-- **Impact**: Unless Windows Spell Checking explicitly flags a candidate as `ActionReplace` ("certain"), **every single 1-letter typo in a 2- or 3-letter word is mathematically rejected**. (e.g. typing `kat` for `cat`, `fro` for `for`, `dof` for `dog`).
-- **Fix**: Scale `CautiousMaxCost` based on word length and proximity score, or allow substitutions if `Cost <= 0.85` and frequency log difference exceeds 3.0.
+### [HIGH-03] Single-Character Substitution Typos in Short Words Always Rejected [RESOLVED]
+- **Location**: `src/Spelling/Ranker.cs` & `src/Engine/Engine.cs`
+- **Problem**: Words with length <= 3 trigger `cautious = true`. With `CautiousMaxCost = 0.6`, single vowel swaps (0.7) and nearby key swaps (0.8) were mathematically rejected in short words.
+- **Impact**: Single-letter typos in 2- or 3-letter words were rejected (`kat` -> `cat`, `dof` -> `dog`).
+- **Fix**: Refine cautious threshold to accept high-confidence proximity and vowel substitutions (`Cost <= 0.85`) when the target word is common (`commonness >= 5.0`) and the typed token is a rare typo.
 
 ### [HIGH-04] Fullscreen Game Detection False Positives on Maximized Borderless Windows [RESOLVED]
 - **Location**: `src/Interop/Native.cs`
@@ -148,20 +145,17 @@
 
 ## 3. Engine, Spelling & Grammar Coverage Blind Spots (P2)
 
-### [MED-01] Destructive Normalization in `American()` Suppresses Valid Words
-- **Location**: `src/Spelling/Ranker.cs:676-690`
-- **Problem**: `American()` uses blind string replacements across the entire token:
-  - `"our" -> "or"`: converts `"four"` to `"for"`, `"sour"` to `"sor"`, `"pour"` to `"por"`, `"hour"` to `"hor"`.
-  - `"ll" -> "l"`: converts `"really"` to `"realy"`, `"ball"` to `"bal"`.
-  - `"ence" -> "ense"`: converts `"fence"` to `"fense"`.
-- **Impact**: Because `IsSpellingVariant` checks `American(typed) == American(fix)`, the ranker believes `"four"` and `"for"` are spelling variants of each other, suppressing valid corrections and generating erroneous substitutions.
-- **Fix**: Restrict American/British transformations to word-suffix checks (e.g. `EndsWith("colour") -> "color"`) rather than unbounded substring replacements.
+### [MED-01] Destructive Normalization in `American()` Suppresses Valid Words [RESOLVED]
+- **Location**: `src/Spelling/Ranker.cs`
+- **Problem**: `American()` previously used blind substring replacements across the entire token (`"our" -> "or"`, `"ll" -> "l"`, `"ence" -> "ense"`), falsely treating words like `four` and `for`, `really` and `realy`, `fence` and `fense` as variants.
+- **Impact**: Suppressed valid corrections and caused erroneous substitutions.
+- **Fix**: Restrict American/British transformations to word-suffix checks (e.g. `EndsWith("our")` for length > 4, `-ogue`, `-tre/-bre`) and specific variant pairs rather than unbounded replacements.
 
-### [MED-02] Foreign Diacritics & Accented Vowels Misclassified
-- **Location**: `src/Spelling/Ranker.cs:887, 896, 956`
-- **Problem**: `IsVowel(char c)` only checks ASCII `'a', 'e', 'i', 'o', 'u'`. Accented characters (`é, è, ê, á, à, ä, í, ó, ö, ú, ü`) return `false`.
-- **Impact**: Loanwords common in English (`café`, `résumé`, `cliché`, `façade`, `naïve`) are penalized with consonant penalties (0.9 instead of 0.6) and are excluded from omission subsequence indexes.
-- **Fix**: Include common unicode accented vowels in `IsVowel` and normalize diacritics using Unicode normalization (`NormalizationForm.FormD`).
+### [MED-02] Foreign Diacritics & Accented Vowels Misclassified [RESOLVED]
+- **Location**: `src/Spelling/Ranker.cs`
+- **Problem**: `IsVowel(char c)` only checked ASCII vowels, causing accented loanwords common in English (`café`, `résumé`, `cliché`, `façade`, `naïve`) to suffer heavy consonant penalties.
+- **Impact**: Accented words were penalized in ranking.
+- **Fix**: Include accented vowels in `IsVowel` and add `BaseChar(c)` to provide cheap `0.2` swap cost for diacritic accent corrections.
 
 ### [MED-03] Major High-Frequency Homophone Gaps in Phrase Fixes
 - **Location**: `data/phrase-fixes.txt`
@@ -174,11 +168,11 @@
   - `lose / loose`: `loose weight` -> `lose weight`, `lose knot` -> `loose knot`.
 - **Fix**: Expand `data/phrase-fixes.txt` with these unambiguous 2-word and 3-word grammatical patterns.
 
-### [MED-04] Smart Quotes Break Word Boundaries
+### [MED-04] Smart Quotes Break Word Boundaries [RESOLVED]
 - **Location**: `src/Engine/Engine.cs` & `src/Spelling/Ranker.cs`
-- **Problem**: Microsoft Word, Outlook, and web browsers automatically replace ASCII apostrophes `'` with typographic right single quotes `’` (`\u2019`) and double quotes `”`.
-- **Impact**: The engine treats `\u2019` as a foreign character / punctuation break rather than an apostrophe, splitting contractions like `don’t` into `don` and `t`, corrupting words in progress.
-- **Fix**: Normalize curly single quotes (`\u2018`, `\u2019`) to ASCII `'` in the token buffer.
+- **Problem**: Microsoft Word, Outlook, and web browsers automatically replace ASCII apostrophes `'` with typographic right single quotes `’` (`\u2019`).
+- **Impact**: The engine treated `\u2019` as a foreign character / punctuation break, splitting contractions like `don’t` into `don` and `t`.
+- **Fix**: Normalize curly single quotes (`\u2018`, `\u2019`) to ASCII `'` in `Engine.Char` and `Ranker.Best`.
 
 ### [MED-05] TypoLog Memory Leak Under Continuous Unique Misspellings
 - **Location**: `src/Configuration/Settings.cs:686-688`

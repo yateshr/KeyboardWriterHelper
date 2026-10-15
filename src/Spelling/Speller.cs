@@ -69,7 +69,7 @@ namespace KeyboardWriterHelper
 
     // Dictionary + ranking. Create and use on one thread.
 
-    sealed class Speller
+    sealed class Speller : IDisposable
 
     {
 
@@ -98,6 +98,16 @@ namespace KeyboardWriterHelper
             Ranker.UseContext = options.UseContext;
 
             Ranker.SetLayout(Ranker.ParseLayout(options.KeyboardLayout));
+
+        }
+
+    
+
+        public void Dispose()
+
+        {
+
+            if (Dictionary != null) Dictionary.Dispose();
 
         }
 
@@ -177,7 +187,7 @@ namespace KeyboardWriterHelper
 
     // Runs the Speller on its own thread and remembers the answers.
 
-    sealed class SpellService
+    sealed class SpellService : IDisposable
 
     {
 
@@ -221,6 +231,8 @@ namespace KeyboardWriterHelper
 
         volatile bool useContext;
 
+        volatile Speller speller;
+
     
 
         // The dictionaries in use, and every English one Windows has.
@@ -261,7 +273,7 @@ namespace KeyboardWriterHelper
 
         {
 
-            Speller speller = null;
+            speller = null;
 
             try
 
@@ -299,7 +311,11 @@ namespace KeyboardWriterHelper
 
                     {
 
-                        speller = new Speller(request.Options, speller.Ranker);
+                        Speller oldSpeller = speller;
+
+                        speller = new Speller(request.Options, oldSpeller != null ? oldSpeller.Ranker : null);
+
+                        if (oldSpeller != null) oldSpeller.Dispose();
 
                         Languages = speller.Dictionary.Languages;
 
@@ -426,6 +442,32 @@ namespace KeyboardWriterHelper
             tooSlow = true;
 
             return null;
+
+        }
+
+    
+
+        public void UpdateLayout(IntPtr layoutHandle)
+
+        {
+
+            if (speller != null && speller.Ranker != null)
+
+                speller.Ranker.UpdateActiveLayout(layoutHandle);
+
+        }
+
+    
+
+        public void Dispose()
+
+        {
+
+            try { queue.CompleteAdding(); }
+
+            catch { }
+
+            if (speller != null) speller.Dispose();
 
         }
 

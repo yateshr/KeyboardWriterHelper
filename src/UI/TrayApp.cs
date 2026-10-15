@@ -303,6 +303,8 @@ namespace KeyboardWriterHelper
 
                 if (corrector != null) corrector.Dispose();
 
+                if (spelling != null) spelling.Dispose();
+
                 if (myWords != null) myWords.Sync();
 
                 if (myFixes != null) myFixes.Sync();
