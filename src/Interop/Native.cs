@@ -43,7 +43,7 @@ namespace KeyboardWriterHelper
 
                          VK_MENU = 0x12, VK_CAPITAL = 0x14, VK_ESCAPE = 0x1B, VK_SPACE = 0x20,
 
-                         VK_LWIN = 0x5B, VK_RWIN = 0x5C, VK_LSHIFT = 0xA0, VK_LMENU = 0xA4, VK_RMENU = 0xA5,
+                         VK_LWIN = 0x5B, VK_RWIN = 0x5C, VK_LSHIFT = 0xA0, VK_LCONTROL = 0xA2, VK_RCONTROL = 0xA3, VK_LMENU = 0xA4, VK_RMENU = 0xA5,
 
                          VK_NOTHING = 0xE8; // a code no keyboard key has
 
@@ -223,6 +223,8 @@ namespace KeyboardWriterHelper
 
         public const uint WS_CAPTION = 0x00C00000;
 
+        public const uint WS_MAXIMIZE = 0x01000000;
+
     
 
         [DllImport("user32.dll")]
@@ -359,6 +361,8 @@ namespace KeyboardWriterHelper
 
                 int style = GetWindowLong(fg, GWL_STYLE);
 
+                if ((style & (int)WS_MAXIMIZE) != 0) return false;
+
                 if ((style & (int)WS_CAPTION) != (int)WS_CAPTION)
 
                 {
@@ -407,11 +411,15 @@ namespace KeyboardWriterHelper
 
     
 
-        public static void Send(List<INPUT> inputs)
+        public static bool Send(List<INPUT> inputs)
 
         {
 
-            SendInput((uint)inputs.Count, inputs.ToArray(), Marshal.SizeOf(typeof(INPUT)));
+            if (inputs == null || inputs.Count == 0) return true;
+
+            uint sent = SendInput((uint)inputs.Count, inputs.ToArray(), Marshal.SizeOf(typeof(INPUT)));
+
+            return sent == (uint)inputs.Count;
 
         }
 

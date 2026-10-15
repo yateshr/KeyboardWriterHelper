@@ -269,45 +269,91 @@ namespace KeyboardWriterHelper
 
             housekeeping.Start();
 
-    
-
             tray.ShowBalloonTip(6000, AppName,
 
                 "Running. Misspelled words are fixed when you press Space. Press Backspace right after a fix to undo it.",
 
                 ToolTipIcon.Info);
 
+            AppDomain.CurrentDomain.ProcessExit += delegate { DisposeResources(); };
+
+            AppDomain.CurrentDomain.UnhandledException += delegate { DisposeResources(); };
+
+            Application.ApplicationExit += delegate { DisposeResources(); };
+
         }
 
-    
+        bool disposedResources;
+
+        void DisposeResources()
+
+        {
+
+            if (disposedResources) return;
+
+            disposedResources = true;
+
+            try
+
+            {
+
+                housekeeping.Stop();
+
+                if (candidatePopup != null) candidatePopup.Dispose();
+
+                if (corrector != null) corrector.Dispose();
+
+                if (myWords != null) myWords.Sync();
+
+                if (myFixes != null) myFixes.Sync();
+
+                if (excludedApps != null) excludedApps.Sync();
+
+                if (settings != null) settings.Save();
+
+                if (settings != null && settings.RememberTypos && typos != null) typos.Save();
+
+                WriteStats();
+
+                if (tray != null)
+
+                {
+
+                    tray.Visible = false;
+
+                    tray.Dispose();
+
+                }
+
+                if (iconOn != null) iconOn.Dispose();
+
+                if (iconOff != null) iconOff.Dispose();
+
+                if (iconSkipped != null) iconSkipped.Dispose();
+
+            }
+
+            catch { }
+
+        }
 
         protected override void ExitThreadCore()
 
         {
 
-            housekeeping.Stop();
-
-            if (candidatePopup != null) candidatePopup.Dispose();
-
-            corrector.Dispose();
-
-            myWords.Sync();
-
-            myFixes.Sync();
-
-            excludedApps.Sync();
-
-            settings.Save();
-
-            if (settings.RememberTypos) typos.Save();
-
-            WriteStats();
-
-            tray.Visible = false;
-
-            tray.Dispose();
+            DisposeResources();
 
             base.ExitThreadCore();
+
+        }
+
+        protected override void Dispose(bool disposing)
+
+        {
+
+            if (disposing) DisposeResources();
+
+            base.Dispose(disposing);
 
         }
 
@@ -979,11 +1025,37 @@ namespace KeyboardWriterHelper
 
                 }
 
-                return Icon.FromHandle(bmp.GetHicon());
+                IntPtr hIcon = bmp.GetHicon();
+
+                try
+
+                {
+
+                    using (Icon temp = Icon.FromHandle(hIcon))
+
+                    {
+
+                        return (Icon)temp.Clone();
+
+                    }
+
+                }
+
+                finally
+
+                {
+
+                    DestroyIcon(hIcon);
+
+                }
 
             }
 
         }
+
+        [DllImport("user32.dll", SetLastError = true)]
+
+        static extern bool DestroyIcon(IntPtr hIcon);
 
     }
 

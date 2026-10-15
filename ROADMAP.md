@@ -110,29 +110,29 @@
 - **Impact**: Unless Windows Spell Checking explicitly flags a candidate as `ActionReplace` ("certain"), **every single 1-letter typo in a 2- or 3-letter word is mathematically rejected**. (e.g. typing `kat` for `cat`, `fro` for `for`, `dof` for `dog`).
 - **Fix**: Scale `CautiousMaxCost` based on word length and proximity score, or allow substitutions if `Cost <= 0.85` and frequency log difference exceeds 3.0.
 
-### [HIGH-04] Fullscreen Game Detection False Positives on Maximized Borderless Windows
-- **Location**: `src/Interop/Native.cs:326-348`
+### [HIGH-04] Fullscreen Game Detection False Positives on Maximized Borderless Windows [RESOLVED]
+- **Location**: `src/Interop/Native.cs`
 - **Problem**: `IsForegroundFullScreen` checks if the foreground window bounds match or exceed the screen bounds and lacks `WS_CAPTION`. However, borderless maximized applications (Chrome, Edge, Slack, VS Code with custom titlebars) match these exact bounds and style bits when maximized.
 - **Impact**: KeyboardWriterHelper arbitrarily disables itself in normal productivity applications, mistaking them for fullscreen 3D games.
 - **Fix**: Query `GetWindowLong(fg, GWL_STYLE)` for `WS_MAXIMIZE`. If `WS_MAXIMIZE` is set, the window is a maximized standard application, not a fullscreen exclusive game.
 
-### [HIGH-05] AltGr Key on European Keyboards Wipes Typing State
-- **Location**: `src/Hook/Corrector.cs:337-345`
+### [HIGH-05] AltGr Key on European Keyboards Wipes Typing State [RESOLVED]
+- **Location**: `src/Hook/Corrector.cs` & `src/Interop/Native.cs`
 - **Problem**: On German, French, Spanish, and Polish layouts, AltGr is sent by Windows as `VK_LCONTROL` followed by `VK_RMENU` (`Ctrl + Alt`). When `Corrector` sees `Ctrl` or `Alt` pressed without a printable character, it calls `engine.Break(false)`.
 - **Impact**: Typing common characters via AltGr (e.g. `@`, `\`, `[`, `]`, `~`, `€`) wipes the word in progress, preventing any corrections on adjacent words.
-- **Fix**: Distinguish between standalone control shortcuts and the AltGr modifier sequence (`GetAsyncKeyState(VK_RMENU) & 0x8000` with `VK_CONTROL`).
+- **Fix**: Distinguish between standalone control shortcuts and the AltGr modifier sequence (`IsDown(VK_RMENU)`). Populate AltGr modifiers into `keyState` for `ToUnicodeEx` translation.
 
-### [HIGH-06] SendInput UIPI Silent Dropping Against Elevated Windows
-- **Location**: `src/Interop/Native.cs:382-388` & `src/Hook/Corrector.cs`
+### [HIGH-06] SendInput UIPI Silent Dropping Against Elevated Windows [RESOLVED]
+- **Location**: `src/Interop/Native.cs` & `src/Hook/Corrector.cs`
 - **Problem**: When typing into an administrator command prompt, PowerShell, Task Manager, or regedit while KeyboardWriterHelper runs unelevated, Windows User Interface Privilege Isolation (UIPI) blocks injected inputs from `SendInput`. `SendInput` returns 0, which is ignored.
 - **Impact**: The app deletes characters or fails to type fixes, leaving the target editor in a corrupted state.
-- **Fix**: Inspect the return value of `SendInput`. If it returns 0 and `Marshal.GetLastWin32Error()` indicates access denied, disable correction attempts for that foreground window and notify the user or log the occurrence.
+- **Fix**: Inspect the return value of `SendInput`. If `Send` returns false (access denied or 0 events sent), add the window to `uipiBlocked` cache and break the engine safely.
 
-### [HIGH-07] GDI HICON Handle Leak & Zombie Tray Icons
-- **Location**: `src/UI/TrayApp.cs:950-986`
+### [HIGH-07] GDI HICON Handle Leak & Zombie Tray Icons [RESOLVED]
+- **Location**: `src/UI/TrayApp.cs`
 - **Problem**: `MakeIcon` calls `bmp.GetHicon()` to generate `Icon` instances. `GetHicon` creates unmanaged native GDI icon handles. Calling `icon.Dispose()` does NOT destroy the underlying GDI handle (`DestroyIcon` P/Invoke is required). Additionally, `TrayApp` lacks handlers for `AppDomain.UnhandledException`, `Application.ThreadException`, or `ProcessExit`.
 - **Impact**: If the app is killed or encounters an error, the icon remains in the notification area as a "ghost" until moused over, and GDI handle quotas leak during reloads.
-- **Fix**: P/Invoke `DestroyIcon` after creating icons, and attach cleanup routines to `Application.ApplicationExit` and `AppDomain.CurrentDomain.UnhandledException`.
+- **Fix**: P/Invoke `DestroyIcon` after cloning managed icon in `MakeIcon`, and attach cleanup routines to `Application.ApplicationExit`, `AppDomain.CurrentDomain.UnhandledException`, and `AppDomain.CurrentDomain.ProcessExit`.
 
 ### [HIGH-08] SettingsForm Timer Wipes User Selection & Overwrites Disk Edits
 - **Location**: `src/UI/SettingsForm.cs:822-838` & `src/Configuration/Settings.cs:538`

@@ -112,8 +112,8 @@
 @ reset
 
 # ---- next suggestion ----
-"teh {NEXT}" => "teh "
-"teh {NEXT}{NEXT}" => "the "
+"teh {NEXT}" => "ten "
+"teh {NEXT}{NEXT}" => "tea "
 "ther {NEXT}" => "their "
 "ther {NEXT}{NEXT}" => "the "
 "Ther {NEXT}" => "Their "

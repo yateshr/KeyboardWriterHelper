@@ -60,6 +60,8 @@ namespace KeyboardWriterHelper
 
         readonly Settings settings;
 
+        readonly HashSet<IntPtr> uipiBlocked = new HashSet<IntPtr>();
+
         // Keys injected with this marker count as typed by the user (self-test only).
 
         readonly IntPtr testMarker;
@@ -690,7 +692,7 @@ namespace KeyboardWriterHelper
 
     
 
-            if (repeat || excludedApps.Contains(lastApp) || (settings.SkipFullscreenGames && Native.IsForegroundFullScreen(foreground)))
+            if (repeat || excludedApps.Contains(lastApp) || uipiBlocked.Contains(foreground) || (settings.SkipFullscreenGames && Native.IsForegroundFullScreen(foreground)))
 
             {
 
@@ -724,7 +726,9 @@ namespace KeyboardWriterHelper
 
     
 
-            if (ctrl || alt || IsDown(Native.VK_LWIN) || IsDown(Native.VK_RWIN))
+            bool isAltGr = IsDown(Native.VK_RMENU);
+
+            if ((ctrl && !isAltGr) || (alt && !isAltGr) || IsDown(Native.VK_LWIN) || IsDown(Native.VK_RWIN))
 
             {
 
@@ -761,6 +765,20 @@ namespace KeyboardWriterHelper
             if (IsDown(Native.VK_SHIFT)) keyState[Native.VK_SHIFT] = 0x80;
 
             if ((Native.GetKeyState(Native.VK_CAPITAL) & 1) != 0) keyState[Native.VK_CAPITAL] = 1;
+
+            if (isAltGr)
+
+            {
+
+                keyState[Native.VK_CONTROL] = 0x80;
+
+                keyState[Native.VK_LCONTROL] = 0x80;
+
+                keyState[Native.VK_MENU] = 0x80;
+
+                keyState[Native.VK_RMENU] = 0x80;
+
+            }
 
             IntPtr layout = Native.GetKeyboardLayout(Native.GetWindowThreadProcessId(foreground, IntPtr.Zero));
 
@@ -850,7 +868,25 @@ namespace KeyboardWriterHelper
 
             }
 
-            Native.Send(inputs);
+            if (!Native.Send(inputs))
+
+            {
+
+                int error = Marshal.GetLastWin32Error();
+
+                if (error == 5 || error == 0)
+
+                {
+
+                    IntPtr fg = Native.GetForegroundWindow();
+
+                    if (fg != IntPtr.Zero) uipiBlocked.Add(fg);
+
+                }
+
+                engine.Break(false);
+
+            }
 
         }
 
