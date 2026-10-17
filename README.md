@@ -30,7 +30,17 @@ before building again: Windows locks the exe while it runs.
 
 - **Instant Correction & Undo**:
   - Press **Backspace** right after a fix to undo it (the word is then left as typed).
-  - Undo the same fix twice and the word is added to *My words* automatically.
+  - With personal learning enabled, undoing a correction twice protects the word or phrase
+    across sessions. Learned entries are managed separately from your manual *My words* list.
+- **Personal Learning (off by default)**:
+  - Enable it in **Settings > Learning** to remember names, vocabulary and preferred fixes locally.
+  - Two explicit rejections protect a word or phrase. Choose the same alternative with
+    **Ctrl+Alt+N** three times, starting the next word after each choice, to learn a preferred fix.
+  - Only the final selected alternative counts. Simply typing on after an automatic fix,
+    cycling through candidates, Smart Compose, and capitalization-only changes do not train it.
+  - The Learning tab shows both pending feedback and learned entries. Forget selected entries,
+    clear all learning, or turn learning off to pause both collection and use of saved preferences.
+  - Manual *My words* and *My fixes* take priority. No sentences or clipboard contents are collected.
 - **Candidate Switching & Floating Candidate Pill**:
   - **Ctrl+Alt+N** right after a fix swaps in the next-best word (`ther ` gives `there`;
     the shortcut then offers `their`, `the`, `they`, and last what you typed).
@@ -42,6 +52,11 @@ before building again: Windows locks the exe while it runs.
     `could went` → `could go`, `a apple` → `an apple`. Correct English such as `Does it have`,
     `If he were`, `Is there going to be`, `The can fell` or `Plan A` is left alone
     (see `tests/must-not-change.txt`).
+- **Offline Sentence Context**:
+  - Ranks spelling candidates against up to six earlier words, using adjacent bigrams,
+    trigrams and progressively weaker topic signals from older words.
+  - Context may override the strongest spelling-only answer only by a conservative
+    confidence margin, so an incidental earlier word cannot force a weak correction.
 - **Smart Compose (off by default)**:
   - Guesses the next word from the words before (`thank ` → `you`, `look forward ` → `to`).
   - **Tab** accepts the guess only while the pill shows it; at any other moment Tab belongs to
@@ -77,7 +92,7 @@ before building again: Windows locks the exe while it runs.
   - **Ctrl+Alt+K** or double-click the tray icon pauses and resumes.
   - Tray icon: green = correcting, amber = skipping the program in front or a fullscreen game, grey = paused.
 
-Every one of these features can be toggled in **Settings > Corrections** and **Settings > General**.
+Feature controls are in **Settings > Corrections**, **Settings > General** and **Settings > Learning**.
 
 ## Settings
 
@@ -88,11 +103,15 @@ Open via Tray menu > **Settings and statistics**:
 - **My fixes**: Your own fixes, shortcuts, and snippets written as `typo=correction`, one to four words on the left (e.g. `brb=be right back`, `d={date}`, `clip={clip}`).
 - **Programs**: Programs in which correction is bypassed.
 - **Typos**: Inspect and manage frequent corrections.
+- **Learning**: Enable personal learning, inspect feedback counts and learned words/fixes, forget entries, or clear learning.
 - **Statistics**: Performance counters, latency metrics, and data folder launcher.
 
 Your settings and lists are plain text files in `%APPDATA%\KeyboardWriterHelper`.
 Edits made in Notepad are picked up within a second; if a list was changed in the app at the
-same time, both sets of changes are kept.
+same time, both sets of changes are kept. Personal feedback and preferences are stored separately
+in `personal-learning.txt`; manage that file through the Learning tab. Turning learning off retains
+the entries but stops using and updating them. Clear all learning also clears saved feedback counts,
+without changing manual lists. Earlier versions' words already saved in My words remain there.
 
 ## Word lists
 
@@ -118,6 +137,17 @@ Run the complete test and evaluation suite:
 ```cmd
 test.cmd
 ```
+
+The personal learning store and engine feedback can also be tested without Windows, using .NET 10:
+
+```sh
+dotnet run --project tests/Personalization/Personalization.csproj -c Release
+```
+
+These tests compile the production store, policy and engine and exercise learning, restart,
+manual overrides, feedback cancellation, file validation and failed-save recovery. Spelling
+fixtures replace the Windows dictionary for these tests; the Windows suite below still validates
+the real dictionary and keyboard hook.
 
 It fails when any step fails:
 

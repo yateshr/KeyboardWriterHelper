@@ -88,7 +88,7 @@ namespace KeyboardWriterHelper
         // Read on the keyboard thread, written by the settings window.
         public volatile bool FixOnPunctuation = true, CapitalizeSentences = true, FixTwoCapitals = true,
                              FixPhrases = true, DoubleSpacePeriod, UseContext = true, AcceptVariants = true,
-                             RememberTypos, SmartDashes, SmartArrows, SmartEllipsis,
+                             RememberTypos, LearnPersonalVocabulary, SmartDashes, SmartArrows, SmartEllipsis,
                              SkipFullscreenGames = true, ShowCandidatePopup = true, SmartCompose;
         public volatile Hotkey PauseHotkey = Hotkey.Parse("Ctrl+Alt+K"), NextHotkey = Hotkey.Parse("Ctrl+Alt+N");
         // The English spelling that supplies the suggestions ("" = the first one installed).
@@ -116,6 +116,7 @@ namespace KeyboardWriterHelper
                     else if (key == "useContext") UseContext = value;
                     else if (key == "acceptVariants") AcceptVariants = value;
                     else if (key == "rememberTypos") RememberTypos = value;
+                    else if (key == "learnPersonalVocabulary") LearnPersonalVocabulary = text == "true";
                     else if (key == "smartDashes") SmartDashes = value;
                     else if (key == "smartArrows") SmartArrows = value;
                     else if (key == "smartEllipsis") SmartEllipsis = value;
@@ -181,6 +182,7 @@ namespace KeyboardWriterHelper
                     "useContext=" + Text(UseContext) +
                     "acceptVariants=" + Text(AcceptVariants) +
                     "rememberTypos=" + Text(RememberTypos) +
+                    "learnPersonalVocabulary=" + Text(LearnPersonalVocabulary) +
                     "smartDashes=" + Text(SmartDashes) +
                     "smartArrows=" + Text(SmartArrows) +
                     "smartEllipsis=" + Text(SmartEllipsis) +

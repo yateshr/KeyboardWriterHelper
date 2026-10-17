@@ -15,6 +15,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="tests/**/*.cs" />
     <!-- english-model.bin holds the same counts as the three text lists in a
          compact form; the text lists are only built in when it is missing. -->
     <EmbeddedResource Include="english-model.bin" Condition="Exists('english-model.bin')">

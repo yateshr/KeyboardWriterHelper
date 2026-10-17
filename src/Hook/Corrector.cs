@@ -30,14 +30,9 @@ namespace KeyboardWriterHelper
         // Safe budget well below Windows LowLevelHooksTimeout (which can be as low as 100ms under policy)
         const int LookupBudgetMs = 40;
 
-        // Backspace right after a fix always undoes it; the word is only added to
-        // "my words" for good when the same fix is undone this many times, so a
-        // stray Backspace cannot switch a correction off.
-        const int UndosBeforeLearning = 2;
-
         readonly SpellService spelling;
         readonly ListFile myWords, myFixes, excludedApps;
-        readonly Dictionary<string, int> undoCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        readonly Personalization personalization;
         readonly Counters counters;
         readonly Settings settings;
         // Windows SendInput could not type into (elevated programs), with their process id.
@@ -90,7 +85,7 @@ namespace KeyboardWriterHelper
         public event Action<string, string> PredictionOffered;
         public event Action PredictionDismissed;
         public event Action EnabledChanged;
-        // A word was added to "my words" because its fix was undone repeatedly.
+        // A new personal rule became active after repeated explicit feedback.
         public event Action<string> Learned;
 
         public bool Enabled
@@ -103,19 +98,22 @@ namespace KeyboardWriterHelper
         public string LastApp { get { return lastApp; } }
 
         public Corrector(SpellService spelling, ListFile myWords, ListFile myFixes, ListFile excludedApps,
-            Counters counters, Settings settings, IntPtr testMarker)
+            Counters counters, Settings settings, IntPtr testMarker, PersonalLearning learning = null)
         {
             this.settings = settings;
             this.spelling = spelling;
             this.myWords = myWords;
             this.myFixes = myFixes;
             this.excludedApps = excludedApps;
+            personalization = new Personalization(learning, myWords.Contains, myFixes.Get, delegate { return settings.FixPhrases; });
             this.counters = counters;
             this.testMarker = testMarker;
-            engine = new Engine(Lookup, myWords.Contains, myFixes.Get, Type, (Func<string, string, string, string>)spelling.PredictNext);
+            engine = new Engine(Lookup, personalization.IsIgnored, personalization.OwnFix, Type, (Func<string, string, string, string>)spelling.PredictNext);
             engine.Clipboard = Native.GetClipboardText;
             engine.Corrected += OnCorrected;
             engine.Undone += OnUndone;
+            personalization.Attach(engine);
+            personalization.Learned += delegate(string typed) { if (Learned != null) Learned(typed); };
             engine.Changed += delegate(string typed, string before, string now) { if (Changed != null) Changed(typed, before, now); };
             engine.CandidateOffered += delegate(string fix, string[] choices) { if (CandidateOffered != null) CandidateOffered(fix, choices); };
             engine.CandidateDismissed += delegate { if (CandidateDismissed != null) CandidateDismissed(); };
@@ -204,11 +202,11 @@ namespace KeyboardWriterHelper
             Native.UnhookWindowsHookEx(mouseHook);
         }
 
-        Suggestion Lookup(string word, string secondPrevious, string previous, bool cautious)
+        Suggestion Lookup(string word, string[] context, bool cautious)
         {
             counters.Words++;
             bool tooSlow;
-            Suggestion result = spelling.Suggest(word, secondPrevious, previous, cautious, LookupBudgetMs, out tooSlow);
+            Suggestion result = spelling.Suggest(word, context, cautious, LookupBudgetMs, out tooSlow);
             if (tooSlow) counters.TooSlow++;
             return result;
         }
@@ -223,14 +221,6 @@ namespace KeyboardWriterHelper
         {
             counters.Undone++;
             if (Undone != null) Undone(word, fix);
-            int times;
-            undoCounts.TryGetValue(word, out times);
-            undoCounts[word] = ++times;
-            if (times >= UndosBeforeLearning && !myWords.Contains(word))
-            {
-                myWords.Add(word);
-                if (Learned != null) Learned(word);
-            }
         }
 
         // On the mouse thread. The engine belongs to the keyboard thread, so a
@@ -547,7 +537,8 @@ namespace KeyboardWriterHelper
         {
             // Another window came to the front while the word was looked up: the
             // fix belongs to the old one and must not be typed into the new one.
-            if (Native.GetForegroundWindow() != lastForeground) return;
+            if (Native.GetForegroundWindow() != lastForeground)
+                throw new InvalidOperationException("The active window changed before the correction could be applied.");
 
             // Real scan codes, for programs that read those instead of the key code.
             ushort backScan = (ushort)Native.MapVirtualKey(Native.VK_BACK, 0);
@@ -576,7 +567,10 @@ namespace KeyboardWriterHelper
                     IntPtr fg = Native.GetForegroundWindow();
                     if (fg != IntPtr.Zero) uipiBlocked[fg] = Native.ProcessIdOf(fg);
                 }
-                engine.Break(false);
+                // Abort the engine operation before it creates undo/learning
+                // state for text that Windows never accepted. The hook catches
+                // this and resets its state.
+                throw new Win32Exception(error, "Windows could not apply the correction.");
             }
         }
     }

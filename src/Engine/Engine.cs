@@ -30,6 +30,7 @@ namespace KeyboardWriterHelper
             public string Lead, Original, Fix, Terminator;
             // The word before, as it was when this one was typed.
             public string Previous, SecondPrevious, ThirdPrevious;
+            public string[] Context;
             public bool AtSentenceStart;
             // Everything the text could be: the fix, the next-best candidates and
             // last what was typed. Choice is the one on screen.
@@ -38,6 +39,7 @@ namespace KeyboardWriterHelper
         }
 
         const int MaxWordLength = 40;
+        const int MaxContextWords = 6;
 
         // The built-in lists; each file in data\ says at its top what it is for.
         static readonly Dictionary<string, string> CommonFixes = Data.Pairs("fixes.txt");
@@ -59,7 +61,9 @@ namespace KeyboardWriterHelper
             { "sold", "sell" }, { "sent", "send" }, { "sang", "sing" }, { "sank", "sink" }, { "sat", "sit" },
             { "slept", "sleep" }, { "stood", "stand" }, { "stole", "steal" }, { "swam", "swim" }, { "threw", "throw" },
             { "told", "tell" }, { "woke", "wake" }, { "wore", "wear" }, { "won", "win" }, { "bought", "buy" },
-            { "brought", "bring" }, { "caught", "catch" }, { "fought", "fight" }, { "taught", "teach" }, { "thought", "think" }
+            { "brought", "bring" }, { "caught", "catch" }, { "fought", "fight" }, { "taught", "teach" }, { "thought", "think" },
+            { "began", "begin" }, { "drank", "drink" }, { "blew", "blow" }, { "drew", "draw" }, { "flew", "fly" },
+            { "shook", "shake" }, { "tore", "tear" }, { "swore", "swear" }, { "forgave", "forgive" }
         };
 
         static readonly Dictionary<string, string> PastToPastParticiple = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -83,8 +87,28 @@ namespace KeyboardWriterHelper
             { "he don't", "he doesn't" }, { "she don't", "she doesn't" }, { "it don't", "it doesn't" },
             { "he have", "he has" }, { "she have", "she has" }, { "it have", "it has" },
             { "they has", "they have" }, { "we has", "we have" }, { "you has", "you have" },
-            { "i has", "i have" }, { "i is", "i am" }, { "i are", "i am" }
+            { "he are", "he is" }, { "she are", "she is" }, { "it are", "it is" },
+            { "he am", "he is" }, { "she am", "she is" }, { "it am", "it is" },
+            { "they am", "they are" }, { "we am", "we are" }, { "you am", "you are" },
+            { "i has", "i have" }, { "i is", "i am" }, { "i are", "i am" }, { "i does", "i do" }
         };
+
+        // Common lexical verbs whose third-person singular form is irregular or
+        // not safe to infer mechanically ("fly" -> "flies", but "play" ->
+        // "plays"). They are only used with the same statement/question guards
+        // as the auxiliary agreement rules below.
+        static readonly Dictionary<string, string> ThirdPersonVerbs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "do", "does" }, { "go", "goes" }, { "say", "says" }, { "know", "knows" },
+            { "think", "thinks" }, { "want", "wants" }, { "need", "needs" }, { "seem", "seems" },
+            { "look", "looks" }, { "work", "works" }, { "make", "makes" }, { "take", "takes" },
+            { "get", "gets" }, { "come", "comes" }, { "give", "gives" }, { "use", "uses" },
+            { "find", "finds" }, { "tell", "tells" }, { "ask", "asks" }, { "feel", "feels" },
+            { "become", "becomes" }, { "leave", "leaves" }, { "put", "puts" }, { "mean", "means" },
+            { "keep", "keeps" }, { "let", "lets" }, { "begin", "begins" }, { "try", "tries" },
+            { "fly", "flies" }, { "carry", "carries" }, { "study", "studies" }, { "watch", "watches" }
+        };
+        static readonly Dictionary<string, string> BaseVerbsByThirdPerson = Reverse(ThirdPersonVerbs);
 
         // Words after which a pronoun starts a plain statement, so "he have" really
         // is a slip. After anything else ("does it have", "would he have", "let
@@ -122,7 +146,7 @@ namespace KeyboardWriterHelper
         static readonly SymbolKind[] SymbolKinds =
             { SymbolKind.Dash, SymbolKind.Dash, SymbolKind.Ellipsis, SymbolKind.Arrow, SymbolKind.Arrow, SymbolKind.Arrow };
 
-        readonly Func<string, string, string, bool, Suggestion> suggest; // (word, second word before, word before, cautious); words before in lower case
+        readonly Func<string, string[], bool, Suggestion> suggest; // (word, earlier sentence words, cautious); context is lower case, oldest first
         readonly Func<string, string, string, string> predict; // (second word before, word before, prefix) -> predicted word, or null
         readonly Func<string, bool> isIgnored;
         // The user's own fix for a word or a two-word phrase, or null.
@@ -150,6 +174,7 @@ namespace KeyboardWriterHelper
         string previous;
         string secondPrevious;
         string thirdPrevious;
+        readonly List<string> sentenceContext = new List<string>(MaxContextWords);
         // The last key was the Space that ended a plain word.
         bool spaceAfterWord;
         // The last key turned two spaces into a full stop.
@@ -197,13 +222,17 @@ namespace KeyboardWriterHelper
         public event Action<string, string> Undone;
         // (typed, fix before, fix now): another candidate was picked.
         public event Action<string, string, string> Changed;
+        // Only the final explicit candidate selection, when typing resumes:
+        // (original text, initial automatic fix, selected text). Cycling, undo,
+        // and caret/focus changes alone never confirm a preference.
+        public event Action<string, string, string> ChoiceCommitted;
         public event Action<string, string[]> CandidateOffered;
         public event Action CandidateDismissed;
         public event Action<string, string> PredictionOffered;
         public event Action PredictionDismissed;
 
         // predict may be null (no Smart Compose).
-        public Engine(Func<string, string, string, bool, Suggestion> suggest, Func<string, bool> isIgnored,
+        public Engine(Func<string, string[], bool, Suggestion> suggest, Func<string, bool> isIgnored,
             Func<string, string> ownFix, Action<int, string> emit, Func<string, string, string, string> predict)
         {
             this.suggest = suggest;
@@ -235,6 +264,57 @@ namespace KeyboardWriterHelper
 
         static string Lower(string text) { return text == null ? null : text.ToLowerInvariant(); }
 
+        string[] ContextSnapshot()
+        {
+            string[] result = new string[sentenceContext.Count];
+            for (int i = 0; i < result.Length; i++) result[i] = Lower(sentenceContext[i]);
+            return result;
+        }
+
+        void RestoreContext(string[] context)
+        {
+            sentenceContext.Clear();
+            if (context == null) return;
+            for (int i = Math.Max(0, context.Length - MaxContextWords); i < context.Length; i++)
+                sentenceContext.Add(context[i]);
+        }
+
+        void AppendContext(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return;
+            foreach (string part in text.Split(new char[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                string clean = part.Trim('(', ')', '[', ']', '{', '}', '"', '\'', ',', ';', ':', '!', '?', '.');
+                if (clean.Length == 0) continue;
+                if (sentenceContext.Count == MaxContextWords) sentenceContext.RemoveAt(0);
+                sentenceContext.Add(clean);
+            }
+        }
+
+        void RemoveContextWords(int count)
+        {
+            while (count-- > 0 && sentenceContext.Count > 0)
+                sentenceContext.RemoveAt(sentenceContext.Count - 1);
+        }
+
+        static int WordsIn(string text)
+        {
+            return string.IsNullOrEmpty(text) ? 0 : text.Split(new char[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries).Length;
+        }
+
+        void SetContextAfterCorrection(Undo correction)
+        {
+            RestoreContext(correction.Context);
+            RemoveContextWords(WordsIn(correction.Lead));
+            AppendContext(correction.Fix);
+        }
+
+        void ResetHistory()
+        {
+            thirdPrevious = secondPrevious = previous = null;
+            sentenceContext.Clear();
+        }
+
         public bool AcceptPrediction()
         {
             if (currentPrediction == null) return false;
@@ -254,6 +334,7 @@ namespace KeyboardWriterHelper
             thirdPrevious = secondPrevious;
             secondPrevious = previous;
             previous = pred;
+            AppendContext(pred);
             Clear();
             spaceAfterWord = true;
             tainted = false;
@@ -280,7 +361,7 @@ namespace KeyboardWriterHelper
             predictionUndo = null;
             DismissPrediction();
             capNext = false;
-            thirdPrevious = secondPrevious = previous = null;
+            ResetHistory();
             spaceAfterWord = madeFullStop = false;
             symbols.Length = 0;
             tainted = !clean;
@@ -296,6 +377,8 @@ namespace KeyboardWriterHelper
         public bool Char(char c)
         {
             if (c == '\u2018' || c == '\u2019') c = '\'';
+            if (undo != null && undo.Choice > 0 && char.IsLetter(c) && ChoiceCommitted != null)
+                ChoiceCommitted(undo.Lead + undo.Original, undo.Choices[0], undo.Fix);
             if (undo != null && CandidateDismissed != null) CandidateDismissed();
             undo = null;
             predictionUndo = null;
@@ -332,7 +415,7 @@ namespace KeyboardWriterHelper
                     madeFullStop = true;
                     afterSentenceEnd = true;
                     capNext = true;
-                    thirdPrevious = secondPrevious = previous = null;
+                    ResetHistory();
                     return true;
                 }
 
@@ -344,9 +427,15 @@ namespace KeyboardWriterHelper
                 string shown = swallowed ? undo.Fix : last;
                 Clear();
                 tainted = false;
-                thirdPrevious = plain ? secondPrevious : null;
-                secondPrevious = plain ? previous : null;
-                previous = plain ? LastWord(shown) : null;
+                if (plain)
+                {
+                    if (swallowed) SetContextAfterCorrection(undo);
+                    else AppendContext(shown);
+                    thirdPrevious = secondPrevious;
+                    secondPrevious = previous;
+                    previous = LastWord(shown);
+                }
+                else ResetHistory();
                 spaceAfterWord = plain;
                 if (hadWord)
                     capNext = ending.Length > 0 && IsSentenceEnd(ending[ending.Length - 1]) &&
@@ -362,7 +451,7 @@ namespace KeyboardWriterHelper
                 DismissPrediction();
                 if (IsSentenceEnd(c)) afterSentenceEnd = true;
                 capNext = false;
-                thirdPrevious = secondPrevious = previous = null;
+                ResetHistory();
                 Clear();
                 // Whatever follows with no space is part of the same token.
                 tainted = true;
@@ -379,7 +468,7 @@ namespace KeyboardWriterHelper
                 return false;
             }
 
-            thirdPrevious = secondPrevious = previous = null;
+            ResetHistory();
             DismissPrediction();
             if (!tainted && word.Length == 0 && IsOpener(c)) return false;
 
@@ -403,7 +492,8 @@ namespace KeyboardWriterHelper
 
                 emit(typed.Length, shown + " ");
                 undo = new Undo { Lead = "", Original = typed, Fix = shown, Terminator = " ", Previous = previous,
-                                  SecondPrevious = secondPrevious, ThirdPrevious = thirdPrevious, Choices = new string[] { shown, typed } };
+                                  SecondPrevious = secondPrevious, ThirdPrevious = thirdPrevious, Context = ContextSnapshot(),
+                                  Choices = new string[] { shown, typed } };
                 symbols.Length = 0;
                 Clear();
                 tainted = false;
@@ -412,7 +502,7 @@ namespace KeyboardWriterHelper
                     afterSentenceEnd = true;
                     capNext = true;
                 }
-                thirdPrevious = secondPrevious = previous = null;
+                ResetHistory();
                 if (CandidateOffered != null) CandidateOffered(shown, undo.Choices);
                 return true;
             }
@@ -449,6 +539,7 @@ namespace KeyboardWriterHelper
                 previous = secondPrevious;
                 secondPrevious = thirdPrevious;
                 thirdPrevious = null;
+                RemoveContextWords(1);
                 spaceAfterWord = false;
                 tainted = false;
                 if (word.Length > 0) OfferPrediction(false);
@@ -482,6 +573,7 @@ namespace KeyboardWriterHelper
                 previous = u.Previous;
                 secondPrevious = u.SecondPrevious;
                 thirdPrevious = u.ThirdPrevious;
+                RestoreContext(u.Context);
                 if (CandidateDismissed != null) CandidateDismissed();
                 // Not an undo if "next suggestion" had already brought the typed text back.
                 if (u.Fix != u.Lead + u.Original && Undone != null) Undone(u.Lead + u.Original, u.Fix);
@@ -496,7 +588,7 @@ namespace KeyboardWriterHelper
             else
             {
                 tainted = true;
-                thirdPrevious = secondPrevious = previous = null;
+                ResetHistory();
             }
             return false;
         }
@@ -516,6 +608,7 @@ namespace KeyboardWriterHelper
             u.Fix = u.Choices[u.Choice];
             emit(before.Length + u.Terminator.Length, u.Fix + u.Terminator);
             if (previous != null) previous = LastWord(u.Fix);
+            SetContextAfterCorrection(u);
             if (Changed != null) Changed(u.Lead + u.Original, before, u.Fix);
             if (CandidateOffered != null) CandidateOffered(u.Fix, u.Choices);
             return true;
@@ -536,7 +629,8 @@ namespace KeyboardWriterHelper
             // The space itself has not reached the screen yet, hence the -1.
             emit(typed.Length + terminator.Length - 1, fix + terminator);
             undo = new Undo { Lead = lead, Original = original, Fix = fix, Terminator = terminator, Previous = previous,
-                              SecondPrevious = secondPrevious, ThirdPrevious = thirdPrevious, AtSentenceStart = wordAtSentenceStart, Choices = Choices(typed, fix) };
+                              SecondPrevious = secondPrevious, ThirdPrevious = thirdPrevious, Context = ContextSnapshot(),
+                              AtSentenceStart = wordAtSentenceStart, Choices = Choices(typed, fix) };
             if (Corrected != null) Corrected(typed, fix);
             if (CandidateOffered != null) CandidateOffered(fix, undo.Choices);
             return true;
@@ -760,7 +854,37 @@ namespace KeyboardWriterHelper
                 return agreementFix;
             }
 
+            // 7. Common lexical verb agreement: "he work" -> "he works" and
+            // "they works" -> "they work". Questions and modal clauses are
+            // protected by AgreementApplies ("Does he work?", "Can she go?").
+            bool singularSubject = prevLower == "he" || prevLower == "she" || prevLower == "it";
+            bool pluralSubject = prevLower == "i" || prevLower == "you" || prevLower == "we" || prevLower == "they";
+            if ((singularSubject || pluralSubject) && AgreementApplies(secondPrev, prevLower))
+            {
+                string baseVerb;
+                string thirdPerson;
+                if (singularSubject && ThirdPersonVerbs.TryGetValue(currLower, out thirdPerson))
+                {
+                    phraseLead = prev + " ";
+                    if (char.IsUpper(curr[0])) thirdPerson = Capital(thirdPerson);
+                    return prev + " " + thirdPerson;
+                }
+                if (pluralSubject && BaseVerbsByThirdPerson.TryGetValue(currLower, out baseVerb))
+                {
+                    phraseLead = prev + " ";
+                    if (char.IsUpper(curr[0])) baseVerb = Capital(baseVerb);
+                    return prev + " " + baseVerb;
+                }
+            }
+
             return null;
+        }
+
+        static Dictionary<string, string> Reverse(Dictionary<string, string> source)
+        {
+            Dictionary<string, string> result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (KeyValuePair<string, string> item in source) result[item.Value] = item.Key;
+            return result;
         }
 
         // Only cases where the sound of the word is certain from its letters are
@@ -996,7 +1120,7 @@ namespace KeyboardWriterHelper
             bool capitalised = char.IsUpper(w[0]);
             if (!CommonFixes.TryGetValue(w, out fix))
             {
-                Suggestion s = suggest(w, Lower(secondPrevious), Lower(previous), capitalised || w.Length <= Ranker.ShortWord);
+                Suggestion s = suggest(w, ContextSnapshot(), capitalised || w.Length <= Ranker.ShortWord);
                 if (s == null) return null;
                 fix = s.Fix;
                 // A capital mid-sentence is most likely a name: only accept a fix

@@ -28,8 +28,8 @@ namespace KeyboardWriterHelper
     sealed class Scored
     {
         public string Word;
-        // Score ranks the candidates; Plain is the same without the help of the
-        // word before, and is what the "is this convincing" limits look at.
+        // Score ranks the candidates; Plain is the same without sentence
+        // context, and is what the "is this convincing" limits look at.
         public double Cost, Score, Plain;
         public bool FromWindows;
     }
@@ -43,7 +43,7 @@ namespace KeyboardWriterHelper
         public bool UseOmissionCandidates = true;
         public double MinScore = -2.5;         // an uncertain best guess scoring below this is left alone
         public double MaxFixCost = 3.5;       // beyond this the best guess is not trusted
-        public double ContextWeight = 0.5;    // score per factor of ten by which the word before makes a candidate likelier
+        public double ContextWeight = 0.5;    // score per factor of ten by which sentence context makes a candidate likelier
         public bool UseContext = true;
         // "color"/"colour": leave either alone, whichever dictionary is in use.
         public bool AcceptVariants = true;
@@ -54,7 +54,7 @@ namespace KeyboardWriterHelper
         const int MaxValidations = 8;
         // Further candidates remembered for "next suggestion".
         const int MaxOthers = 3;
-        // The word before never counts for more than this many factors of ten.
+        // Sentence context never counts for more than this many factors of ten.
         const double MaxContext = 1.5;
         const int MaxLength = 48;
         const int MaxOmittedLetters = 2;
@@ -73,6 +73,10 @@ namespace KeyboardWriterHelper
         public const int ShortWord = 3;
         const double MeantMinLog = 4.0, MeantGap = 1.5, WeakPartLog = 4.5;
         const double CautiousMaxCost = 0.6, CautiousMinLog = 5.0, NameSafeLog = 3.0, KnownNameLog = 3.8;
+        // Context may overturn the strongest spelling-only candidate only with a
+        // visible margin. This keeps a weak topic association from auto-fixing a
+        // word that the dictionary and edit score prefer.
+        const double ContextSwitchMargin = 0.35;
 
         public enum KeyboardLayoutKind { Auto, Qwerty, Qwertz, Azerty, Dvorak, Colemak }
 
@@ -530,15 +534,26 @@ namespace KeyboardWriterHelper
         // stand together, against how often they would by chance.
         double Context(string secondPrevious, string previous, string candidate)
         {
-            if (!UseContext) return 0;
+            if (previous == null) return Context((string[])null, candidate);
+            return Context(secondPrevious == null ? new string[] { previous } : new string[] { secondPrevious, previous }, candidate);
+        }
+
+        // Score the candidate against up to six earlier words. The adjacent pair
+        // and trigram remain strongest; older words provide a decaying topic
+        // signal, useful when the immediately preceding word is uninformative.
+        double Context(string[] context, string candidate)
+        {
+            if (!UseContext || context == null || context.Length == 0) return 0;
             double score = 0;
-            if (secondPrevious != null && previous != null)
+            int last = context.Length - 1;
+            if (last > 0)
             {
-                double tri = ContextTrigram(secondPrevious, previous, candidate);
+                double tri = ContextTrigram(context[last - 1], context[last], candidate);
                 if (tri > 0) score += tri;
             }
-            if (previous != null) score += ContextPair(previous, candidate);
-            if (secondPrevious != null) score += 0.4 * ContextPair(secondPrevious, candidate);
+            double[] weights = { 1.0, 0.4, 0.2, 0.12, 0.08, 0.05 };
+            for (int distance = 0; distance < weights.Length && last - distance >= 0; distance++)
+                score += weights[distance] * ContextPair(context[last - distance], candidate);
             return Math.Max(-MaxContext, Math.Min(MaxContext, score));
         }
 
@@ -582,16 +597,23 @@ namespace KeyboardWriterHelper
         // certain = the dictionary vouches for the first one. cautious = the word
         // is short or capitalised, where a wrong guess is likely (abbreviations,
         // names, words from another language), so only an obvious fix is accepted.
-        // previous = the word typed just before, lower case, or null: it helps
+        // context = up to six earlier words, lower case, oldest first: it helps
         // choose between candidates but never makes a weak guess acceptable.
         // others, if given, receives the next-best candidates.
         public string Best(string typed, string previous, IList<string> windows, bool certain, bool cautious,
             Func<string, bool> isCorrect, List<Scored> trace, List<string> others)
         {
-            return Best(typed, null, previous, windows, certain, cautious, isCorrect, trace, others);
+            return Best(typed, previous == null ? null : new string[] { previous }, windows, certain, cautious, isCorrect, trace, others);
         }
 
         public string Best(string typed, string secondPrevious, string previous, IList<string> windows, bool certain, bool cautious,
+            Func<string, bool> isCorrect, List<Scored> trace, List<string> others)
+        {
+            string[] context = previous == null ? null : secondPrevious == null ? new string[] { previous } : new string[] { secondPrevious, previous };
+            return Best(typed, context, windows, certain, cautious, isCorrect, trace, others);
+        }
+
+        public string Best(string typed, string[] context, IList<string> windows, bool certain, bool cautious,
             Func<string, bool> isCorrect, List<Scored> trace, List<string> others)
         {
             if (string.IsNullOrEmpty(typed)) return null;
@@ -612,7 +634,7 @@ namespace KeyboardWriterHelper
                 if (candidate != candidateLower && candidateLower != lower && !candidateLower.StartsWith("i'"))
                     score -= ProperNounPenalty;
                 all.Add(new Scored { Word = candidate, Cost = cost, Plain = score,
-                    Score = score + ContextWeight * Context(secondPrevious, previous, candidateLower), FromWindows = true });
+                    Score = score + ContextWeight * Context(context, candidateLower), FromWindows = true });
             }
 
             // The letters are right and only capitals are missing ("english",
@@ -640,11 +662,14 @@ namespace KeyboardWriterHelper
                     if (!IsSubsequence(lower, word) || !seen.Add(word)) continue;
                     double cost = Cost(lower, word);
                     double score = FrequencyWeight * logs[k] - EditWeight * cost;
-                    all.Add(new Scored { Word = word, Cost = cost, Plain = score, Score = score + ContextWeight * Context(secondPrevious, previous, word) });
+                    all.Add(new Scored { Word = word, Cost = cost, Plain = score, Score = score + ContextWeight * Context(context, word) });
                 }
             }
 
             // When the dictionary vouches for its answer, take it; otherwise rank.
+            Scored plainWinner = null;
+            foreach (Scored candidate in all)
+                if (candidate.FromWindows && (plainWinner == null || candidate.Plain > plainWinner.Plain)) plainWinner = candidate;
             Scored winner = certain && all.Count > 0 ? all[0] : null;
             all.Sort(delegate(Scored x, Scored y) { return y.Score.CompareTo(x.Score); });
             if (trace != null) trace.AddRange(all);
@@ -664,6 +689,8 @@ namespace KeyboardWriterHelper
                 winner = s;
             }
             if (winner == null || winner.Cost > MaxFixCost) return null;
+            if (!certain && plainWinner != null && winner != plainWinner &&
+                winner.Score < plainWinner.Score + ContextSwitchMargin) return null;
             // A weak best guess is a coin toss; leaving the word alone costs less.
             if (!certain && winner.Plain < MinScore) return null;
             string fix = winner.Word.ToLowerInvariant();

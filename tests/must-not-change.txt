@@ -29,6 +29,10 @@
 "Will went home early. " => "Will went home early. "
 "I will saw the plank. " => "I will saw the plank. "
 "The watch has rose gold trim. " => "The watch has rose gold trim. "
+"Does he work here? " => "Does he work here? "
+"Can she go now? " => "Can she go now? "
+"Would it seem wrong? " => "Would it seem wrong? "
+"Did he try again? " => "Did he try again? "
 
 # a / an
 "Plan A in action. " => "Plan A in action. "

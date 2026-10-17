@@ -279,7 +279,7 @@ flowchart TD
 
 ### [FEAT-02] 100% Offline Compound Sentence-Aware Contextual Grammar
 - **Location**: `src/Spelling/Ranker.cs`, `src/Engine/Engine.cs`, `data/phrase-fixes.txt`, `data/fixes.txt`
-- **Capability**: Leverages compound trigram and skip-bigram context (`secondPrevious` + `previous` $\to$ candidate) to evaluate sentence syntax and disambiguate confusable words and homophones completely offline without cloud dependency.
+- **Capability**: Scores each spelling candidate against a rolling six-word sentence window. The adjacent bigram and trigram are strongest, while older skip-bigrams decay with distance and provide a topic signal. Context can overturn the spelling-only winner only when it clears a confidence margin. Everything remains offline.
 - **Corpus Expansion**: Added extensive auxiliary and modal verb agreement patterns (`has went` $\to$ `has gone`, `have saw` $\to$ `have seen`), article agreement patterns (`a apple` $\to$ `an apple`, `an car` $\to$ `a car`), and common idiom corrections (`in the passed` $\to$ `in the past`, `weather forecast`, `peace of mind`).
 
 ---

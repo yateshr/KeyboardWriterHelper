@@ -35,6 +35,7 @@ namespace KeyboardWriterHelper
         readonly Counters counters = new Counters();
         readonly Settings settings;
         readonly ListFile myWords, myFixes, excludedApps;
+        readonly PersonalLearning learning;
         readonly TypoLog typos;
         readonly SpellService spelling;
         readonly Corrector corrector;
@@ -70,6 +71,7 @@ namespace KeyboardWriterHelper
             myWords = ListFile.MyWords(folder);
             myFixes = ListFile.MyFixes(folder);
             excludedApps = ListFile.ExcludedApps(folder);
+            learning = new PersonalLearning(Path.Combine(folder, "personal-learning.txt"), settings.LearnPersonalVocabulary);
             typos = new TypoLog(Path.Combine(folder, "typo-counts.txt"), settings.RememberTypos);
             LoadLifetime();
             spelling = new SpellService(counters, settings.SpellOptions());
@@ -111,7 +113,7 @@ namespace KeyboardWriterHelper
             candidatePopup = new CandidatePopup();
 
             IntPtr forceHandle = ui.Handle;
-            corrector = new Corrector(spelling, myWords, myFixes, excludedApps, counters, settings, IntPtr.Zero);
+            corrector = new Corrector(spelling, myWords, myFixes, excludedApps, counters, settings, IntPtr.Zero, learning);
             corrector.Corrected += OnCorrected;
             corrector.Undone += delegate(string typed, string fix) { typos.Count(typed, fix, -1); };
             corrector.Changed += OnChanged;
@@ -128,7 +130,10 @@ namespace KeyboardWriterHelper
             corrector.PredictionDismissed += delegate { OnUi(candidatePopup.Dismiss); };
             corrector.Learned += delegate(string word)
             {
-                OnUi(delegate { Say("\"" + word + "\" will not be corrected any more (you undid it twice)."); });
+                string preferred = learning.GetFix(word);
+                string message = preferred == null ? "Learned to leave \"" + word + "\" as typed."
+                    : "Learned your preference: " + word + " → " + preferred + ".";
+                OnUi(delegate { Say(message + " Manage this in Settings > Learning."); });
             };
             // The hotkey gives no other sign that it worked, so say so.
             corrector.EnabledChanged += delegate { OnUi(delegate { pausedUntil = DateTime.MinValue; ShowState(); AnnounceState(); }); };
@@ -177,6 +182,7 @@ namespace KeyboardWriterHelper
                 if (myWords != null) myWords.Sync();
                 if (myFixes != null) myFixes.Sync();
                 if (excludedApps != null) excludedApps.Sync();
+                if (learning != null) learning.Save();
                 if (settings != null) settings.Save();
                 if (settings != null && settings.RememberTypos && typos != null) typos.Save();
                 WriteStats();
@@ -208,6 +214,7 @@ namespace KeyboardWriterHelper
         public ListFile MyWords { get { return myWords; } }
         public ListFile MyFixes { get { return myFixes; } }
         public ListFile ExcludedApps { get { return excludedApps; } }
+        public PersonalLearning Learning { get { return learning; } }
         public string CurrentApp { get { return currentApp; } }
         public string DataFolder { get { return folder; } }
         // The dictionaries in use, and every English one Windows has.
@@ -235,6 +242,8 @@ namespace KeyboardWriterHelper
         // A word (or two-word phrase) the user does not want corrected.
         public void NeverCorrect(string typed)
         {
+            learning.Remove(typed);
+            learning.Save();
             myFixes.Remove(typed);
             myFixes.Sync();
             myWords.Add(typed);
@@ -244,6 +253,8 @@ namespace KeyboardWriterHelper
         // From now on `typed` always becomes `fix`.
         public void AlwaysFix(string typed, string fix)
         {
+            learning.Remove(typed);
+            learning.Save();
             myWords.Remove(typed);
             myWords.Sync();
             myFixes.Add(typed + "=" + fix);
@@ -263,6 +274,26 @@ namespace KeyboardWriterHelper
             settings.Save();
             if (on) typos.Save();
             else typos.Forget();
+        }
+
+        public void SetPersonalLearning(bool on)
+        {
+            learning.Enabled = on;
+            settings.LearnPersonalVocabulary = on;
+            settings.Save();
+            learning.Save();
+        }
+
+        public void ForgetLearned(string typed)
+        {
+            learning.Remove(typed);
+            learning.Save();
+        }
+
+        public void ClearPersonalLearning()
+        {
+            learning.Clear();
+            learning.Save();
         }
 
         public string StatsText()
@@ -384,6 +415,7 @@ namespace KeyboardWriterHelper
             myWords.Sync();
             myFixes.Sync();
             excludedApps.Sync();
+            learning.Save();
             if (settings.RememberTypos) typos.Save();
             // The counters change with every key; writing them each second while
             // typing is needless disk work. Also written at exit.

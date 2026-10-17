@@ -275,6 +275,20 @@
 "Londn is " => "London is "
 @ reset
 
+# ---- expanded context-guarded subject/verb agreement ----
+"He work here. " => "He works here. "
+"she go home " => "she goes home "
+"it try again " => "it tries again "
+"and he study daily " => "and he studies daily "
+"They works here. " => "They work here. "
+"we goes home " => "we go home "
+"I does know " => "I do know "
+"she are ready " => "she is ready "
+"they am ready " => "they are ready "
+"could began again " => "could begin again "
+"has drank enough " => "has drunk enough "
+@ reset
+
 # ---- Smart Compose needs the words before: Tab after the first word in a box
 # belongs to the program ("Name" + Tab moves to the next field) ----
 "Name{TAB}" => "Name	"

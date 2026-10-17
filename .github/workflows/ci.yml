@@ -8,6 +8,17 @@ on:
   workflow_dispatch:
 
 jobs:
+  personal-learning:
+    name: Personal Learning (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Run portable personal learning regressions
+        run: dotnet run --project tests/Personalization/Personalization.csproj -c Release
+
   build-and-test:
     name: Build & Test (Windows)
     runs-on: windows-latest
@@ -25,6 +36,9 @@ jobs:
 
       - name: Build with .NET 10
         run: dotnet build -c Release
+
+      - name: Run personal learning regressions on Windows
+        run: dotnet run --project tests/Personalization/Personalization.csproj -c Release
 
       - name: Build with .NET Framework 4.0 (csc.exe)
         shell: cmd

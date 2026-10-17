@@ -31,8 +31,12 @@ namespace KeyboardWriterHelper
         readonly Label statsLabel = new Label(), aboutLabel = new Label();
         readonly System.Windows.Forms.Timer refresh = new System.Windows.Forms.Timer();
         readonly ListBox wordsList = new ListBox(), fixesList = new ListBox(), appsList = new ListBox(), typosList = new ListBox();
+        readonly ListBox learningList = new ListBox();
+        readonly Label learningStatus = new Label();
         readonly RadioButton frequentTypos = new RadioButton(), recentTypos = new RadioButton();
         string[] shownWords = new string[0], shownFixes = new string[0], shownApps = new string[0], shownTypos = new string[0];
+        string[] shownLearning = new string[0];
+        PersonalLearningEntry[] learningItems = new PersonalLearningEntry[0];
         // { typed, fix } behind each line of the typos list.
         string[][] typoItems = new string[0][];
 
@@ -66,6 +70,7 @@ namespace KeyboardWriterHelper
                 "Nothing typed in these programs is corrected. The tray icon turns amber while one of them is in front.",
                 "&Add program", AddProgram, RemoveProgram, "Add the program in front (now)"));
             tabs.TabPages.Add(TyposTab());
+            tabs.TabPages.Add(LearningTab());
             tabs.TabPages.Add(StatsTab());
             Controls.Add(tabs);
             ResumeLayout(false);
@@ -222,7 +227,7 @@ namespace KeyboardWriterHelper
             flow.Controls.Add(Check("Smart Compose: guess the next word from the words before (Tab accepts it while shown)",
                 o.SmartCompose, delegate(bool v) { o.SmartCompose = v; o.Save(); }));
             Label note = Note(
-                "Backspace right after a fix undoes it. Undo the same fix twice and the word is added to My words.\r\n\r\n" +
+                "Backspace right after a fix undoes it. Turn on personal learning in the Learning tab to remember your feedback.\r\n\r\n" +
                 "A full stop never triggers a fix by itself (example.com is not a sentence); the next Space does.", 0, 80);
             note.Margin = new Padding(3, 14, 3, 3);
             flow.Controls.Add(note);
@@ -346,6 +351,47 @@ namespace KeyboardWriterHelper
             return i >= 0 && i < typoItems.Length ? typoItems[i] : null;
         }
 
+        TabPage LearningTab()
+        {
+            TabPage page = new TabPage("Learning");
+            CheckBox learn = Check("Learn from my corrections and keep preferences on this PC",
+                app.Settings.LearnPersonalVocabulary, delegate(bool on) { app.SetPersonalLearning(on); Reload(); });
+            learn.SetBounds(Left0, 10, Wide, 32);
+            Label help = Note("Undo a spelling or phrase correction twice to protect it. Choose the same alternative " +
+                "three times with the next-suggestion shortcut to learn a preferred fix; start the next word to confirm " +
+                "each choice. Turning learning off pauses learning and use of saved preferences.", 50, 58);
+            learningList.SetBounds(Left0, 116, Wide, 196);
+            learningList.IntegralHeight = false;
+            learningList.HorizontalScrollbar = true;
+            learningList.SelectionMode = SelectionMode.MultiExtended;
+            Button forget = new Button();
+            forget.Text = "&Forget selected";
+            forget.SetBounds(Left0, 324, 145, 28);
+            forget.Click += delegate
+            {
+                List<string> selected = new List<string>();
+                foreach (int index in learningList.SelectedIndices)
+                    if (index < learningItems.Length) selected.Add(learningItems[index].Typed);
+                foreach (string typed in selected) app.ForgetLearned(typed);
+                Reload();
+            };
+            Button clear = new Button();
+            clear.Text = "&Clear all learning";
+            clear.SetBounds(Left0 + 155, 324, 150, 28);
+            clear.Click += delegate
+            {
+                if (MessageBox.Show(this, "Forget all learned words, preferences and feedback counts? " +
+                    "Your manual My words and My fixes lists will be kept.", Text,
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+                app.ClearPersonalLearning();
+                Reload();
+            };
+            learningStatus.SetBounds(Left0, 362, Wide, 44);
+            learningStatus.ForeColor = SystemColors.GrayText;
+            page.Controls.AddRange(new Control[] { learn, help, learningList, forget, clear, learningStatus });
+            return page;
+        }
+
         TabPage StatsTab()
         {
             TabPage page = new TabPage("Statistics");
@@ -421,6 +467,23 @@ namespace KeyboardWriterHelper
             Fill(appsList, ref shownApps, app.ExcludedApps.All());
             Fill(fixesList, ref shownFixes, app.MyFixes.All());
             statsLabel.Text = app.StatsText();
+
+            learningItems = app.Learning.All();
+            string[] learnedLines = new string[learningItems.Length];
+            int active = 0;
+            for (int i = 0; i < learningItems.Length; i++)
+            {
+                PersonalLearningEntry entry = learningItems[i];
+                if (entry.IsActive) active++;
+                string action = entry.Replacement == null ? "leave as typed" : entry.Replacement;
+                int threshold = entry.Replacement == null ? PersonalLearning.RejectionThreshold : PersonalLearning.ChoiceThreshold;
+                learnedLines[i] = entry.Typed + Arrow + action + (entry.IsActive ? "  [learned]" :
+                    "  [pending " + entry.Confirmations + "/" + threshold + "]");
+            }
+            Fill(learningList, ref shownLearning, learnedLines);
+            learningStatus.Text = app.Learning.LastError ?? (active + " learned, " + (learningItems.Length - active) +
+                " awaiting more feedback. " + (app.Learning.Enabled ? "Learning is on." : "Learning is off; saved entries are inactive.") +
+                "\r\nManual My words and My fixes always take priority.");
 
             bool frequent = frequentTypos.Checked;
             string[][] items = frequent ? app.TopTypos() : app.RecentCorrections();

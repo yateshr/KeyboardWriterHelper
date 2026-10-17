@@ -69,10 +69,16 @@ namespace KeyboardWriterHelper
         // cautious: see Ranker.Best.
         public Suggestion Check(string word, string previous, bool cautious)
         {
-            return Check(word, null, previous, cautious);
+            return Check(word, previous == null ? null : new string[] { previous }, cautious);
         }
 
         public Suggestion Check(string word, string secondPrevious, string previous, bool cautious)
+        {
+            if (previous == null) return Check(word, (string[])null, cautious);
+            return Check(word, secondPrevious == null ? new string[] { previous } : new string[] { secondPrevious, previous }, cautious);
+        }
+
+        public Suggestion Check(string word, string[] context, bool cautious)
         {
             Suggestion result = new Suggestion();
             bool certain;
@@ -83,7 +89,7 @@ namespace KeyboardWriterHelper
                 return result;
             }
             List<string> others = new List<string>();
-            string best = Ranker.Best(word, secondPrevious, previous, windows, certain, cautious, Dictionary.IsCorrect, null, others);
+            string best = Ranker.Best(word, context, windows, certain, cautious, Dictionary.IsCorrect, null, others);
             if (best != null && best != word)
             {
                 result.Fix = best;
@@ -121,7 +127,8 @@ namespace KeyboardWriterHelper
     {
         sealed class Request
         {
-            public string Word, SecondPrevious, Previous;
+            public string Word;
+            public string[] Context;
             public bool Cautious;
             public Suggestion Result;
             // Set instead of Word: switch to these spelling choices.
@@ -132,7 +139,7 @@ namespace KeyboardWriterHelper
             public readonly ManualResetEventSlim Done = new ManualResetEventSlim(false);
             // Cautious and normal lookups of one word can differ.
             public string WordKey { get { return (Cautious ? "?" : "") + Word; } }
-            public string Key { get { return Previous == null ? WordKey : WordKey + (SecondPrevious == null ? "" : " " + SecondPrevious) + " " + Previous; } }
+            public string Key { get { return Context == null || Context.Length == 0 ? WordKey : WordKey + "\u001f" + string.Join("\u001f", Context); } }
         }
 
         // Answers kept per generation: when the current one is full it becomes the
@@ -176,7 +183,7 @@ namespace KeyboardWriterHelper
                 Languages = speller.Dictionary.Languages;
                 Installed = speller.Dictionary.Installed;
                 // The first lookup loads the dictionary; pay for that now, not on a keystroke.
-                speller.Check("speling", null, false);
+                speller.Check("speling", (string)null, false);
             }
             catch (Exception ex) { startupError = ex; }
             finally { ready.Set(); }
@@ -192,7 +199,7 @@ namespace KeyboardWriterHelper
                         speller = new Speller(request.Options, oldSpeller != null ? oldSpeller.Ranker : null);
                         if (oldSpeller != null) oldSpeller.Dispose();
                         Languages = speller.Dictionary.Languages;
-                        speller.Check("speling", null, false);
+                        speller.Check("speling", (string)null, false);
                     }
                     catch (Exception ex) { counters.Error(ex); }
                     lock (cacheGate)
@@ -205,7 +212,7 @@ namespace KeyboardWriterHelper
                 }
 
                 Suggestion result = null;
-                try { result = speller.Check(request.Word, request.SecondPrevious, request.Previous, request.Cautious); }
+                try { result = speller.Check(request.Word, request.Context, request.Cautious); }
                 catch (Exception ex) { counters.Error(ex); }
                 if (result != null)
                 {
@@ -259,22 +266,29 @@ namespace KeyboardWriterHelper
         // word is left alone this time (tooSlow, null) and the answer is cached for the next.
         public Suggestion Suggest(string word, string previous, bool cautious, int budgetMs, out bool tooSlow)
         {
-            return Suggest(word, null, previous, cautious, budgetMs, out tooSlow);
+            return Suggest(word, previous == null ? null : new string[] { previous }, cautious, budgetMs, out tooSlow);
         }
 
         public Suggestion Suggest(string word, string secondPrevious, string previous, bool cautious, int budgetMs, out bool tooSlow)
         {
+            string[] context = previous == null ? null : secondPrevious == null ? new string[] { previous } : new string[] { secondPrevious, previous };
+            return Suggest(word, context, cautious, budgetMs, out tooSlow);
+        }
+
+        public Suggestion Suggest(string word, string[] context, bool cautious, int budgetMs, out bool tooSlow)
+        {
             tooSlow = false;
             string wordKey = (cautious ? "?" : "") + word;
-            string key = (!useContext || previous == null) ? wordKey : wordKey + (secondPrevious == null ? "" : " " + secondPrevious) + " " + previous;
+            string[] usedContext = useContext ? context : null;
+            string key = usedContext == null || usedContext.Length == 0 ? wordKey : wordKey + "\u001f" + string.Join("\u001f", usedContext);
             lock (cacheGate)
             {
                 Suggestion cached;
-                if (Recall(wordKey, out cached) && (cached.Known || !useContext || previous == null)) return cached;
+                if (Recall(wordKey, out cached) && (cached.Known || !useContext || usedContext == null || usedContext.Length == 0)) return cached;
                 if (Recall(key, out cached)) return cached;
             }
 
-            Request request = new Request { Word = word, SecondPrevious = useContext ? secondPrevious : null, Previous = useContext ? previous : null, Cautious = cautious };
+            Request request = new Request { Word = word, Context = usedContext, Cautious = cautious };
             try { queue.Add(request); }
             catch (InvalidOperationException) { return null; } // shutting down
             if (request.Done.Wait(budgetMs)) return request.Result;

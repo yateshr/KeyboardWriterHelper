@@ -106,7 +106,7 @@ namespace KeyboardWriterHelper
 
             public Desk(Speller speller)
             {
-                Engine = new Engine((Func<string, string, string, bool, Suggestion>)speller.Check, Words.Contains,
+                Engine = new Engine((Func<string, string[], bool, Suggestion>)speller.Check, Words.Contains,
                     delegate(string typed)
                     {
                         string fix;

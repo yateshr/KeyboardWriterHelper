@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../src/Configuration/PersonalLearning.cs" Link="PersonalLearning.cs" />
+    <Compile Include="../../src/Configuration/Personalization.cs" Link="Personalization.cs" />
+    <Compile Include="../../src/Engine/Engine.cs" Link="Engine.cs" />
+    <Compile Include="../../src/Core/Data.cs" Link="Data.cs" />
+    <Compile Include="../../src/Spelling/Ranker.cs" Link="Ranker.cs" />
+    <Compile Include="Program.cs" />
+    <Compile Include="Shims.cs" />
+    <EmbeddedResource Include="../../english-model.bin" Condition="Exists('../../english-model.bin')">
+      <LogicalName>english-model.bin</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="../../english-frequency.txt" Condition="!Exists('../../english-model.bin')">
+      <LogicalName>english-frequency.txt</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="../../english-pairs.txt" Condition="!Exists('../../english-model.bin')">
+      <LogicalName>english-pairs.txt</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="../../english-trigrams.txt" Condition="!Exists('../../english-model.bin') And Exists('../../english-trigrams.txt')">
+      <LogicalName>english-trigrams.txt</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="../../data/*.txt">
+      <LogicalName>%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+</Project>

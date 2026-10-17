@@ -184,3 +184,13 @@ especially: especialy expecially
 generally: generaly
 quickly: quikly quicky
 easily: easly easilly
+responsibility: responsability
+liaison: liason
+pursue: persue
+millennium: millenium
+occurrence: occurence
+questionnaire: questionaire
+relevant: relevent
+restaurant: restarant restaraunt
+rhythm: rythm
+vacuum: vaccum
