@@ -31,7 +31,7 @@ del %LOG% >nul 2>&1
 call :run "built-in lists" --lint
 call :run "misspellings that should be fixed" --eval --min-right %MIN_RIGHT% --max-wrong %MAX_WRONG% "%~dp0tests\typos.txt" "%~dp0tests\reviewer-typos.txt"
 call :run "correct words that should be left alone" --eval-ok --misses --max-changed %MAX_CHANGED% "%~dp0tests\correct-words.txt"
-call :run "typing cases through the engine" --cases "%~dp0tests\typing-cases.txt" "%~dp0tests\must-not-change.txt"
+call :run "typing cases through the engine" --cases "%~dp0tests\typing-cases.txt" "%~dp0tests\must-not-change.txt" "%~dp0tests\grammar-cases.txt"
 
 echo --- end-to-end through the real keyboard hook ---
 if defined KWH_SKIP_SELFTEST (

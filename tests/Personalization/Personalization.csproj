@@ -9,6 +9,7 @@
     <Compile Include="../../src/Configuration/PersonalLearning.cs" Link="PersonalLearning.cs" />
     <Compile Include="../../src/Configuration/Personalization.cs" Link="Personalization.cs" />
     <Compile Include="../../src/Engine/Engine.cs" Link="Engine.cs" />
+    <Compile Include="../../src/Engine/SubjectAgreement.cs" Link="SubjectAgreement.cs" />
     <Compile Include="../../src/Core/Data.cs" Link="Data.cs" />
     <Compile Include="../../src/Spelling/Ranker.cs" Link="Ranker.cs" />
     <Compile Include="Program.cs" />

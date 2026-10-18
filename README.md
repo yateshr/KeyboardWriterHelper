@@ -52,6 +52,18 @@ before building again: Windows locks the exe while it runs.
     `could went` → `could go`, `a apple` → `an apple`. Correct English such as `Does it have`,
     `If he were`, `Is there going to be`, `The can fell` or `Plan A` is left alone
     (see `tests/must-not-change.txt`).
+  - Recognizes common noun subjects, including one adjective: `the files is ready` →
+    `the files are ready`, `a new file have a name` → `a new file has a name`,
+    `every user have access` → `every user has access`.
+  - Corrects verb forms after modals, negation and inverted pronoun questions:
+    `he doesn't likes it` → `he doesn't like it`, `she will goes` → `she will go`,
+    `does he likes it?` → `does he like it?`. One or two short modifiers such as
+    `not` and `always` can appear between the auxiliary and the verb.
+  - Leaves ambiguous noun groups, relative clauses and commands alone. For example,
+    `Everyone have fun` stays unchanged; `Everyone have arrived` waits for `arrived`
+    before becoming `Everyone has arrived`. Manual words/fixes and learned protections
+    also apply to earlier words in a deferred correction. These rules use **Corrections >
+    Fix grammar and phrase mistakes**.
 - **Offline Sentence Context**:
   - Ranks spelling candidates against up to six earlier words, using adjacent bigrams,
     trigrams and progressively weaker topic signals from older words.
@@ -138,10 +150,11 @@ Run the complete test and evaluation suite:
 test.cmd
 ```
 
-The personal learning store and engine feedback can also be tested without Windows, using .NET 10:
+Personal learning and grammar can also be tested without Windows, using .NET 10:
 
 ```sh
 dotnet run --project tests/Personalization/Personalization.csproj -c Release
+dotnet run --project tests/Grammar/Grammar.csproj -c Release
 ```
 
 These tests compile the production store, policy and engine and exercise learning, restart,
@@ -149,14 +162,21 @@ manual overrides, feedback cancellation, file validation and failed-save recover
 fixtures replace the Windows dictionary for these tests; the Windows suite below still validates
 the real dictionary and keyboard hook.
 
-It fails when any step fails:
+The grammar suite uses the production engine with a deterministic spelling fixture and
+the shared `tests/grammar-cases.txt` and `tests/must-not-change.txt` corpora. It checks
+agreement, auxiliary forms, unchanged valid English, manual overrides, undo, candidate
+switching, and personal learning. `test.cmd` runs the same sentence corpora against the
+real Windows dictionary; CI also runs both portable suites on Linux and Windows.
 
-| Step | Command | Today |
+`test.cmd` fails when any step fails. The Windows figures below are the previous
+baseline; rerun Windows CI to measure the expanded grammar corpus and current spelling results.
+
+| Step | Command | Previous Windows baseline |
 | --- | --- | --- |
 | Built-in lists: nothing listed twice or contradicting | `--lint` | ok |
 | Misspellings fixed (limit: at least 95%, at most 3% wrong) | `--eval --min-right 95 --max-wrong 3 tests\typos.txt tests\reviewer-typos.txt` | 95.7% right, 2.4% wrong |
 | Correct words left alone (limit: at most 0.5% changed) | `--eval-ok --max-changed 0.5 tests\correct-words.txt` | 0.3% changed |
-| Typing cases, including correct text that must not change | `--cases tests\typing-cases.txt tests\must-not-change.txt` | 243 passed |
+| Typing cases, including correct text that must not change | `--cases tests\typing-cases.txt tests\must-not-change.txt tests\grammar-cases.txt` | Expanded corpus; rerun on Windows |
 | End to end through the real keyboard hook | `--selftest ...` | types into its own window for a few seconds |
 
 During the end-to-end test a small window types by itself: do not touch the keyboard. Set

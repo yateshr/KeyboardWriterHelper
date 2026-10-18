@@ -106,9 +106,22 @@ namespace KeyboardWriterHelper
             { "find", "finds" }, { "tell", "tells" }, { "ask", "asks" }, { "feel", "feels" },
             { "become", "becomes" }, { "leave", "leaves" }, { "put", "puts" }, { "mean", "means" },
             { "keep", "keeps" }, { "let", "lets" }, { "begin", "begins" }, { "try", "tries" },
-            { "fly", "flies" }, { "carry", "carries" }, { "study", "studies" }, { "watch", "watches" }
+            { "fly", "flies" }, { "carry", "carries" }, { "study", "studies" }, { "watch", "watches" },
+            { "like", "likes" }, { "love", "loves" }, { "live", "lives" }, { "help", "helps" },
+            { "require", "requires" }, { "support", "supports" }, { "include", "includes" },
+            { "contain", "contains" }, { "belong", "belongs" }, { "open", "opens" }, { "close", "closes" },
+            { "play", "plays" }, { "read", "reads" }, { "write", "writes" }, { "run", "runs" },
+            { "start", "starts" }, { "stop", "stops" }, { "wait", "waits" }, { "finish", "finishes" }
         };
         static readonly Dictionary<string, string> BaseVerbsByThirdPerson = Reverse(ThirdPersonVerbs);
+        static readonly HashSet<string> AuxiliaryModifiers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "not", "really", "always", "often", "usually", "sometimes", "never", "ever", "still", "already", "just", "even"
+        };
+        static readonly HashSet<string> AuxiliaryNounIntroducers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "in", "on", "of", "for", "from", "to", "at", "by", "with", "without", "about", "named", "called"
+        };
 
         // Words after which a pronoun starts a plain statement, so "he have" really
         // is a slip. After anything else ("does it have", "would he have", "let
@@ -271,6 +284,13 @@ namespace KeyboardWriterHelper
             return result;
         }
 
+        string[] HistorySnapshot()
+        {
+            // Grammar uses original casing to distinguish names from prose;
+            // spelling still receives the normalized ContextSnapshot above.
+            return sentenceContext.ToArray();
+        }
+
         void RestoreContext(string[] context)
         {
             sentenceContext.Clear();
@@ -309,6 +329,14 @@ namespace KeyboardWriterHelper
             AppendContext(correction.Fix);
         }
 
+        void SyncPhraseHistory()
+        {
+            int count = sentenceContext.Count;
+            previous = count > 0 ? sentenceContext[count - 1] : null;
+            secondPrevious = count > 1 ? sentenceContext[count - 2] : null;
+            thirdPrevious = count > 2 ? sentenceContext[count - 3] : null;
+        }
+
         void ResetHistory()
         {
             thirdPrevious = secondPrevious = previous = null;
@@ -331,10 +359,8 @@ namespace KeyboardWriterHelper
             predictionUndo = new PredictionUndo { Prefix = pfx, Prediction = pred, Remaining = remaining };
             undo = null;
 
-            thirdPrevious = secondPrevious;
-            secondPrevious = previous;
-            previous = pred;
             AppendContext(pred);
+            SyncPhraseHistory();
             Clear();
             spaceAfterWord = true;
             tainted = false;
@@ -431,9 +457,9 @@ namespace KeyboardWriterHelper
                 {
                     if (swallowed) SetContextAfterCorrection(undo);
                     else AppendContext(shown);
-                    thirdPrevious = secondPrevious;
-                    secondPrevious = previous;
-                    previous = LastWord(shown);
+                    // Deferred agreement can change an earlier word (have ->
+                    // has). The phrase matcher must use what is now on screen.
+                    SyncPhraseHistory();
                 }
                 else ResetHistory();
                 spaceAfterWord = plain;
@@ -492,7 +518,7 @@ namespace KeyboardWriterHelper
 
                 emit(typed.Length, shown + " ");
                 undo = new Undo { Lead = "", Original = typed, Fix = shown, Terminator = " ", Previous = previous,
-                                  SecondPrevious = secondPrevious, ThirdPrevious = thirdPrevious, Context = ContextSnapshot(),
+                                  SecondPrevious = secondPrevious, ThirdPrevious = thirdPrevious, Context = HistorySnapshot(),
                                   Choices = new string[] { shown, typed } };
                 symbols.Length = 0;
                 Clear();
@@ -536,10 +562,8 @@ namespace KeyboardWriterHelper
                 word.Length = 0;
                 word.Append(pu.Prefix);
                 trail.Length = 0;
-                previous = secondPrevious;
-                secondPrevious = thirdPrevious;
-                thirdPrevious = null;
                 RemoveContextWords(1);
+                SyncPhraseHistory();
                 spaceAfterWord = false;
                 tainted = false;
                 if (word.Length > 0) OfferPrediction(false);
@@ -607,8 +631,12 @@ namespace KeyboardWriterHelper
             u.Choice = (u.Choice + 1) % u.Choices.Length;
             u.Fix = u.Choices[u.Choice];
             emit(before.Length + u.Terminator.Length, u.Fix + u.Terminator);
-            if (previous != null) previous = LastWord(u.Fix);
-            SetContextAfterCorrection(u);
+            if (u.Terminator == " " && char.IsLetter(u.Original[0]))
+            {
+                SetContextAfterCorrection(u);
+                SyncPhraseHistory();
+            }
+            else ResetHistory();
             if (Changed != null) Changed(u.Lead + u.Original, before, u.Fix);
             if (CandidateOffered != null) CandidateOffered(u.Fix, u.Choices);
             return true;
@@ -629,7 +657,7 @@ namespace KeyboardWriterHelper
             // The space itself has not reached the screen yet, hence the -1.
             emit(typed.Length + terminator.Length - 1, fix + terminator);
             undo = new Undo { Lead = lead, Original = original, Fix = fix, Terminator = terminator, Previous = previous,
-                              SecondPrevious = secondPrevious, ThirdPrevious = thirdPrevious, Context = ContextSnapshot(),
+                              SecondPrevious = secondPrevious, ThirdPrevious = thirdPrevious, Context = HistorySnapshot(),
                               AtSentenceStart = wordAtSentenceStart, Choices = Choices(typed, fix) };
             if (Corrected != null) Corrected(typed, fix);
             if (CandidateOffered != null) CandidateOffered(fix, undo.Choices);
@@ -663,7 +691,8 @@ namespace KeyboardWriterHelper
 
             string fix = DecideWord(w, terminator);
             // The corrected word may complete a phrase: "their si" -> "there is".
-            if (fix != null && (phrase = PhraseFix(fix, out phraseLead)) != null) return AsPhrase(phraseLead, w, phrase);
+            if (fix != null && ownFix(w) == null && (phrase = PhraseFix(fix, out phraseLead)) != null)
+                return AsPhrase(phraseLead, w, phrase);
             return fix;
         }
 
@@ -728,7 +757,7 @@ namespace KeyboardWriterHelper
             if (FixPhrases && !otherLanguage && !isIgnored(current))
             {
                 string gramFix = DynamicGrammarRule(secondPrevious, previous, current, out phraseLead);
-                if (gramFix != null && !isIgnored(phraseLead + current))
+                if (gramFix != null && ownFix(current) == null && !GrammarSpanIgnored(phraseLead, current))
                     return gramFix;
             }
 
@@ -742,36 +771,14 @@ namespace KeyboardWriterHelper
             string prevLower = prev.ToLowerInvariant();
             string currLower = curr.ToLowerInvariant();
 
-            // 1. Check 3-word rule: [modal/auxiliary] + not + [verb]
-            if (!string.IsNullOrEmpty(secondPrev) && prevLower == "not")
-            {
-                string secLower = secondPrev.ToLowerInvariant();
-                if (IsModalAuxiliary(secLower) || IsDoAuxiliary(secLower))
-                {
-                    string infinitive;
-                    if (PastToBareInfinitive.TryGetValue(currLower, out infinitive))
-                    {
-                        if (char.IsUpper(curr[0])) infinitive = Capital(infinitive);
-                        phraseLead = secondPrev + " " + prev + " ";
-                        return secondPrev + " " + prev + " " + infinitive;
-                    }
-                    if (currLower == "has" || currLower == "had")
-                    {
-                        phraseLead = secondPrev + " " + prev + " ";
-                        return secondPrev + " " + prev + " have";
-                    }
-                }
-                else if (IsPerfectAuxiliary(secLower))
-                {
-                    string participle;
-                    if (PastToPastParticiple.TryGetValue(currLower, out participle))
-                    {
-                        if (char.IsUpper(curr[0])) participle = Capital(participle);
-                        phraseLead = secondPrev + " " + prev + " ";
-                        return secondPrev + " " + prev + " " + participle;
-                    }
-                }
-            }
+            // Explicit verb forms, bounded modifiers, and inverted questions.
+            string auxiliaryFix = AuxiliaryVerbRule(curr, out phraseLead);
+            if (auxiliaryFix != null) return auxiliaryFix;
+
+            // Known noun phrases and indefinite subjects. The subject recognizer
+            // needs original casing and the whole available clause prefix.
+            string subjectFix = SubjectAgreement.Correct(sentenceContext.ToArray(), curr, out phraseLead);
+            if (subjectFix != null) return subjectFix;
 
             // 2. Dynamic Article Agreement: a vs an. A capital "A" after another
             // word is a label, not an article ("Plan A in action", "vitamin A or").
@@ -790,52 +797,6 @@ namespace KeyboardWriterHelper
                 {
                     phraseLead = prev + " ";
                     return (char.IsUpper(prev[0]) ? "A " : "a ") + curr;
-                }
-            }
-
-            // After "the", "his"... a modal or "do" is a noun ("the can fell",
-            // "his will made it clear"), and "Will" with a capital before a past
-            // form is a name ("Will went home").
-            bool verbal = prev != "Will" && (secondPrev == null || !NounMakers.Contains(secondPrev));
-
-            // 3. Modal Verb + Bare Infinitive (modals must take bare infinitive, never past simple)
-            if (verbal && IsModalAuxiliary(prevLower))
-            {
-                string infinitive;
-                if (PastToBareInfinitive.TryGetValue(currLower, out infinitive))
-                {
-                    if (char.IsUpper(curr[0])) infinitive = Capital(infinitive);
-                    phraseLead = prev + " ";
-                    return prev + " " + infinitive;
-                }
-            }
-
-            // 4. Perfect Aspect: have/has/had + past participle (never past simple)
-            if (IsPerfectAuxiliary(prevLower))
-            {
-                string participle;
-                if (PastToPastParticiple.TryGetValue(currLower, out participle))
-                {
-                    if (char.IsUpper(curr[0])) participle = Capital(participle);
-                    phraseLead = prev + " ";
-                    return prev + " " + participle;
-                }
-            }
-
-            // 5. Do-Support: did/didn't/does/doesn't/do/don't + bare infinitive
-            if (verbal && IsDoAuxiliary(prevLower))
-            {
-                string infinitive;
-                if (PastToBareInfinitive.TryGetValue(currLower, out infinitive))
-                {
-                    if (char.IsUpper(curr[0])) infinitive = Capital(infinitive);
-                    phraseLead = prev + " ";
-                    return prev + " " + infinitive;
-                }
-                if (currLower == "has" || currLower == "had")
-                {
-                    phraseLead = prev + " ";
-                    return prev + " have";
                 }
             }
 
@@ -863,7 +824,11 @@ namespace KeyboardWriterHelper
             {
                 string baseVerb;
                 string thirdPerson;
-                if (singularSubject && ThirdPersonVerbs.TryGetValue(currLower, out thirdPerson))
+                // "He let us go", "he put it there", and "he read it" can be
+                // past tense; "he need not" uses modal need. Do not guess before
+                // the rest of the sentence has been typed.
+                if (singularSubject && currLower != "let" && currLower != "put" && currLower != "read" && currLower != "need" &&
+                    ThirdPersonVerbs.TryGetValue(currLower, out thirdPerson))
                 {
                     phraseLead = prev + " ";
                     if (char.IsUpper(curr[0])) thirdPerson = Capital(thirdPerson);
@@ -878,6 +843,120 @@ namespace KeyboardWriterHelper
             }
 
             return null;
+        }
+
+        bool GrammarSpanIgnored(string phraseLead, string current)
+        {
+            string text = (phraseLead ?? "") + current;
+            // Deferred agreement can modify an earlier auxiliary, so protected
+            // words and phrases anywhere inside the small span must retain their
+            // spelling, including "everyone have" before the later participle.
+            string[] parts = text.Split(' ');
+            for (int start = 0; start < parts.Length; start++)
+            {
+                string fragment = "";
+                for (int end = start; end < parts.Length; end++)
+                {
+                    fragment += (fragment.Length == 0 ? "" : " ") + parts[end];
+                    if (isIgnored(fragment) || ownFix(fragment) != null) return true;
+                }
+            }
+            return false;
+        }
+
+        string AuxiliaryVerbRule(string current, out string phraseLead)
+        {
+            phraseLead = null;
+            // A capitalized inflection can be a person's name ("Could Drew
+            // win?"). This rule only acts on ordinary lower-case verb tokens.
+            if (current != current.ToLowerInvariant()) return null;
+            string replacement;
+            int count = sentenceContext.Count;
+            for (int span = 1; span <= 3 && span <= count; span++)
+            {
+                int index = count - span;
+                string original = sentenceContext[index];
+                string auxiliary = original.ToLowerInvariant();
+                bool modal = IsModalAuxiliary(auxiliary);
+                bool doSupport = IsDoAuxiliary(auxiliary);
+                bool perfect = IsPerfectAuxiliary(auxiliary);
+                if ((!modal && !doSupport && !perfect) || !PlainGrammarToken(original)) continue;
+
+                int firstModifier = index + 1;
+                bool inverted = firstModifier < count && IsSubjectPronoun(sentenceContext[firstModifier]) &&
+                    QuestionAuxiliaryAt(index);
+                if (inverted) firstModifier++;
+                bool negative = auxiliary.EndsWith("n't", StringComparison.Ordinal) || auxiliary == "cannot";
+                bool modifiers = true;
+                for (int i = firstModifier; i < count; i++)
+                {
+                    string modifier = sentenceContext[i];
+                    if (!AuxiliaryModifiers.Contains(modifier) || modifier != modifier.ToLowerInvariant()) { modifiers = false; break; }
+                    // "What he does never works" has a main-clause works after
+                    // a relative does. Never alone cannot prove do-support.
+                    if (modifier == "not") negative = true;
+                }
+                if (!modifiers) continue;
+                if (!inverted && (original == "Will" || original == "May" || original == "Can" ||
+                    (index > 0 && (NounMakers.Contains(sentenceContext[index - 1]) ||
+                                   AuxiliaryNounIntroducers.Contains(sentenceContext[index - 1]))))) continue;
+
+                if (perfect)
+                {
+                    if (!PastToPastParticiple.TryGetValue(current, out replacement)) continue;
+                }
+                else
+                {
+                    // Affirmative do can take plural nouns: "she does studies",
+                    // "he does works of charity". Third-person reversals need
+                    // a modal, negation or an unmistakable inverted question.
+                    if (doSupport && !negative && !inverted && !SimpleAuxiliarySubject(index)) continue;
+                    if (!PastToBareInfinitive.TryGetValue(current, out replacement))
+                    {
+                        if (current == "has" || current == "had") replacement = "have";
+                        else if ((!modal && !negative && !inverted) ||
+                                 !BaseVerbsByThirdPerson.TryGetValue(current, out replacement)) continue;
+                    }
+                }
+                phraseLead = string.Join(" ", sentenceContext.GetRange(index, span).ToArray()) + " ";
+                return phraseLead + replacement;
+            }
+            return null;
+        }
+
+        static bool PlainGrammarToken(string token)
+        {
+            if (string.IsNullOrEmpty(token)) return false;
+            for (int i = 1; i < token.Length; i++) if (char.IsUpper(token[i])) return false;
+            return true;
+        }
+
+        static bool IsSubjectPronoun(string text)
+        {
+            switch (text.ToLowerInvariant())
+            {
+                case "i": case "you": case "he": case "she": case "it": case "we": case "they": return true;
+                default: return false;
+            }
+        }
+
+        bool QuestionAuxiliaryAt(int index)
+        {
+            if (index == 0) return true;
+            if (index != 1) return false;
+            switch (sentenceContext[0].ToLowerInvariant())
+            {
+                case "why": case "what": case "when": case "where": case "how": return true;
+                default: return false;
+            }
+        }
+
+        bool SimpleAuxiliarySubject(int index)
+        {
+            // "What he did went viral" and "The work he did went unnoticed"
+            // close a relative clause at did. Root auxiliary phrases and simple
+            // pronoun subjects do not have that ambiguity.
+            return index == 0 || (index == 1 && IsSubjectPronoun(sentenceContext[0]));
         }
 
         static Dictionary<string, string> Reverse(Dictionary<string, string> source)
@@ -978,6 +1057,7 @@ namespace KeyboardWriterHelper
                 case "can":
                 case "will":
                 case "might":
+                case "may":
                 case "must":
                 case "shall":
                 case "couldn't":
@@ -1161,8 +1241,6 @@ namespace KeyboardWriterHelper
         }
 
         static string Capital(string text) { return char.ToUpperInvariant(text[0]) + text.Substring(1); }
-
-        static string LastWord(string text) { return text.Substring(text.LastIndexOf(' ') + 1); }
 
         static bool HasVowel(string w)
         {

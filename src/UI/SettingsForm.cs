@@ -212,7 +212,7 @@ namespace KeyboardWriterHelper
                 o.CapitalizeSentences, delegate(bool v) { o.CapitalizeSentences = v; o.Save(); }));
             flow.Controls.Add(Check("Fix two capitals at the start of a word (THe → The)",
                 o.FixTwoCapitals, delegate(bool v) { o.FixTwoCapitals = v; o.Save(); }));
-            flow.Controls.Add(Check("Fix real words in the wrong place (their is → there is, more then → more than)",
+            flow.Controls.Add(Check("Fix grammar and phrase mistakes (the files is → the files are; their is → there is)",
                 o.FixPhrases, delegate(bool v) { o.FixPhrases = v; o.Save(); }));
             flow.Controls.Add(Check("Let the word before help choose the fix when several words are possible",
                 o.UseContext, delegate(bool v) { o.UseContext = v; SpellingChanged(); }));

@@ -9,7 +9,7 @@ on:
 
 jobs:
   personal-learning:
-    name: Personal Learning (Linux)
+    name: Portable Engine Checks (Linux)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,6 +18,8 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Run portable personal learning regressions
         run: dotnet run --project tests/Personalization/Personalization.csproj -c Release
+      - name: Run portable grammar regressions
+        run: dotnet run --project tests/Grammar/Grammar.csproj -c Release
 
   build-and-test:
     name: Build & Test (Windows)
@@ -39,6 +41,9 @@ jobs:
 
       - name: Run personal learning regressions on Windows
         run: dotnet run --project tests/Personalization/Personalization.csproj -c Release
+
+      - name: Run grammar regressions on Windows
+        run: dotnet run --project tests/Grammar/Grammar.csproj -c Release
 
       - name: Build with .NET Framework 4.0 (csc.exe)
         shell: cmd

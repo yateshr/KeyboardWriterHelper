@@ -1,0 +1,146 @@
+# Phase 3 grammar cases; shared by the portable harness and Windows --cases.
+# Every correction should have a counterexample in must-not-change.txt.
+# Inputs use the same directives and {BS}/{NEXT}/{TAB} controls as typing-cases.txt.
+
+# Determiner + noun subjects, with explicit singular/plural agreement.
+"The files is ready. " => "The files are ready. "
+"The file are ready. " => "The file is ready. "
+"The folders has names. " => "The folders have names. "
+"My file have a name. " => "My file has a name. "
+"These files was saved. " => "These files were saved. "
+"Those folders is empty. " => "Those folders are empty. "
+"This file require work. " => "This file requires work. "
+"The files works here. " => "The files work here. "
+"Every user have access. " => "Every user has access. "
+"Each user are welcome. " => "Each user is welcome. "
+"Everyone are welcome. " => "Everyone is welcome. "
+"Everybody are welcome. " => "Everybody is welcome. "
+"I think someone have a question. " => "I think someone has a question. "
+"I think nobody know the answer. " => "I think nobody knows the answer. "
+"Something are wrong. " => "Something is wrong. "
+"A new file have a name. " => "A new file has a name. "
+"The new files is ready. " => "The new files are ready. "
+"I think the files is ready. " => "I think the files are ready. "
+"Everyone have arrived. " => "Everyone has arrived. "
+"Everybody have been here. " => "Everybody has been here. "
+"Someone have eaten already. " => "Someone has eaten already. "
+"No one have been told. " => "No one has been told. "
+"The files is, " => "The files are, "
+"The files is? " => "The files are? "
+
+# Bare verb forms after do or a modal, including negation and one adverb.
+"He doesn't likes it. " => "He doesn't like it. "
+"She don't needs it. " => "She doesn't need it. "
+"They don't works here. " => "They don't work here. "
+"He does not likes it. " => "He does not like it. "
+"He doesn't always likes it. " => "He doesn't always like it. "
+"He will goes home. " => "He will go home. "
+"She can works here. " => "She can work here. "
+"They should studies today. " => "They should study today. "
+"We must watches it. " => "We must watch it. "
+"He will not goes home. " => "He will not go home. "
+"He can always works here. " => "He can always work here. "
+"He doesn't has time. " => "He doesn't have time. "
+"She did not had time. " => "She did not have time. "
+"He didn't went home. " => "He didn't go home. "
+
+# Inverted pronoun questions retain bare verbs.
+"Does he likes it? " => "Does he like it? "
+"Does she works here? " => "Does she work here? "
+"Did he goes home? " => "Did he go home? "
+"Can it works now? " => "Can it work now? "
+"Would they needs help? " => "Would they need help? "
+"Does he not likes it? " => "Does he not like it? "
+"Does he always likes it? " => "Does he always like it? "
+
+# Undo/candidate changes must preserve the actual text and sentence context.
+"The files is {BS}" => "The files is"
+"The files is {BS} " => "The files is "
+"The files is {NEXT}" => "The files is "
+"The files is {NEXT}{NEXT}" => "The files are "
+"He doesn't likes {BS}" => "He doesn't likes"
+"He doesn't likes {NEXT}" => "He doesn't likes "
+"He doesn't likes {NEXT}{NEXT}" => "He doesn't like "
+"Everyone have arrived {BS}" => "Everyone have arrived"
+"Everyone have arrived {NEXT}" => "Everyone have arrived "
+"Everyone have arrived {NEXT}{NEXT}" => "Everyone has arrived "
+"I think everyone have {BS} arrived. " => "I think everyone have arrived. "
+"I think everyone have {NEXT}arrived. " => "I think everyone have arrived. "
+"The files is ready. they works here. " => "The files are ready. They work here. "
+# Undoing and editing a spelling fix must retain earlier title capitalization.
+"The Files wierd {BS}{BS}{BS}{BS}{BS}{BS}is a title. " => "The Files is a title. "
+"The files wierd {BS}{BS}{BS}{BS}{BS}{BS}is ready. " => "The files are ready. "
+
+# Grammar respects punctuation boundaries and settings.
+"The files, is ready. " => "The files, is ready. "
+"He will, goes home. " => "He will, goes home. "
+@ punctuation off
+"The files is," => "The files is,"
+"The files is, " => "The files are, "
+@ reset
+@ phrases off
+"The files is ready. " => "The files is ready. "
+"He doesn't likes it. " => "He doesn't likes it. "
+@ fix files is=files remain
+"The files is ready. " => "The files remain ready. "
+@ reset
+
+# Explicit vocabulary/phrase protection and manual fixes have priority.
+@ word is
+"The files is ready. " => "The files is ready. "
+@ reset
+@ word files is
+"The files is ready. " => "The files is ready. "
+@ reset
+@ word the files is
+"The files is ready. " => "The files is ready. "
+@ reset
+@ word likes
+"He doesn't likes it. " => "He doesn't likes it. "
+@ reset
+@ word doesn't likes
+"He doesn't likes it. " => "He doesn't likes it. "
+@ reset
+@ fix files is=files remain
+"The files is ready. " => "The files remain ready. "
+@ reset
+@ word have
+"Everyone have arrived. " => "Everyone have arrived. "
+@ reset
+@ word everyone have
+"Everyone have arrived. " => "Everyone have arrived. "
+@ reset
+@ fix is=seems
+"The files is ready. " => "The files seems ready. "
+@ reset
+@ fix have=have
+"Everyone have arrived. " => "Everyone have arrived. "
+@ reset
+@ capitals off
+"go now. the files is ready. " => "go now. the files are ready. "
+@ reset
+
+# Later phrase matching must use the actual correction/candidate on screen.
+@ fix has arrived here=has arrived safely
+"Everyone have arrived here " => "Everyone has arrived safely "
+"Everyone have arrived {NEXT}{NEXT}here " => "Everyone has arrived safely "
+@ reset
+@ fix have arrived here=have arrived late
+"Everyone have arrived here " => "Everyone has arrived here "
+"Everyone have arrived {NEXT}here " => "Everyone have arrived late "
+"Everyone have arrived {NEXT}{NEXT}here " => "Everyone has arrived here "
+@ reset
+
+# Candidate switching cannot reconnect history across punctuation or symbols.
+@ punctuation off
+@ fix has arrived here=has arrived safely
+@ fix have arrived here=have arrived late
+"Everyone have arrived, {NEXT}here " => "Everyone have arrived, here "
+"Everyone have arrived, {NEXT}{NEXT}here " => "Everyone has arrived, here "
+@ reset
+@ smartdashes on
+@ fix -- is=changed
+@ fix — is=changed
+"The files -- {NEXT}is " => "The files -- is "
+"The files -- {NEXT}{NEXT}is " => "The files — is "
+@ reset
