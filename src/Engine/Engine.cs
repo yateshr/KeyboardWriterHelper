@@ -210,6 +210,8 @@ namespace KeyboardWriterHelper
         public volatile bool SmartArrows;
         public volatile bool SmartEllipsis;
         public volatile bool SmartCompose = true;
+        // Enables small deterministic context rules alongside the spelling ranker.
+        public volatile bool UseContext = true;
 
         // Where {date}, {time} and {clip} in a snippet come from. The keyboard
         // thread gives the clipboard; tests give a fixed clock and text.
@@ -1198,7 +1200,9 @@ namespace KeyboardWriterHelper
             if (NeverCorrect.Contains(w)) return slip ? w : null;
 
             bool capitalised = char.IsUpper(w[0]);
-            if (!CommonFixes.TryGetValue(w, out fix))
+            string contextual = ContextualFix(w);
+            if (contextual != null) fix = contextual;
+            else if (!CommonFixes.TryGetValue(w, out fix))
             {
                 Suggestion s = suggest(w, ContextSnapshot(), capitalised || w.Length <= Ranker.ShortWord);
                 if (s == null) return null;
@@ -1212,6 +1216,25 @@ namespace KeyboardWriterHelper
             }
             if (capitalised && char.IsLower(fix[0])) fix = Capital(fix);
             return fix == typed ? null : fix;
+        }
+
+        // A few short tokens have two equally plausible dictionary answers.
+        // Keep these rules bounded to an exact preceding word and only enable
+        // them when the user has enabled sentence context.
+        string ContextualFix(string typed)
+        {
+            if (!UseContext || previous == null) return null;
+            if (typed.Equals("thre", StringComparison.OrdinalIgnoreCase))
+            {
+                if (previous.Equals("was", StringComparison.OrdinalIgnoreCase)) return "there";
+                if (previous.Equals("the", StringComparison.OrdinalIgnoreCase)) return "three";
+            }
+            if (typed.Equals("wether", StringComparison.OrdinalIgnoreCase))
+            {
+                if (previous.Equals("know", StringComparison.OrdinalIgnoreCase)) return "whether";
+                if (previous.Equals("the", StringComparison.OrdinalIgnoreCase)) return "weather";
+            }
+            return null;
         }
 
         // "THe", "HEllo": two capitals, then lower case. Not "IDs", "PCs" or

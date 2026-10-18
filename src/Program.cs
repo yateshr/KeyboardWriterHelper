@@ -253,6 +253,7 @@ namespace KeyboardWriterHelper
                 desk.Engine.SmartDashes = smartDashes;
                 desk.Engine.SmartArrows = smartArrows;
                 desk.Engine.SmartEllipsis = smartEllipsis;
+                desk.Engine.UseContext = context;
                 desk.Engine.SmartCompose = smartCompose;
                 return desk;
             }

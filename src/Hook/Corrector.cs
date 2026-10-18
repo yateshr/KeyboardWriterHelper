@@ -400,6 +400,7 @@ namespace KeyboardWriterHelper
             engine.SmartArrows = settings.SmartArrows;
             engine.SmartEllipsis = settings.SmartEllipsis;
             engine.SmartCompose = settings.SmartCompose;
+            engine.UseContext = settings.UseContext;
 
             IntPtr foreground = Native.GetForegroundWindow();
             uint foregroundThread = Native.GetWindowThreadProcessId(foreground, IntPtr.Zero);
