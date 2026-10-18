@@ -1201,7 +1201,16 @@ namespace KeyboardWriterHelper
 
             bool capitalised = char.IsUpper(w[0]);
             string contextual = ContextualFix(w);
-            if (contextual != null) fix = contextual;
+            if (contextual != null)
+            {
+                fix = contextual;
+                // Keep the other valid dictionary interpretation available to
+                // the Next-suggestion shortcut (for example, weather/whether).
+                if (typed.Equals("wether", StringComparison.OrdinalIgnoreCase))
+                    others = new string[] { contextual.Equals("weather", StringComparison.OrdinalIgnoreCase) ? "whether" : "weather" };
+                else if (typed.Equals("thre", StringComparison.OrdinalIgnoreCase))
+                    others = new string[] { contextual.Equals("there", StringComparison.OrdinalIgnoreCase) ? "three" : "there" };
+            }
             else if (!CommonFixes.TryGetValue(w, out fix))
             {
                 Suggestion s = suggest(w, ContextSnapshot(), capitalised || w.Length <= Ranker.ShortWord);
