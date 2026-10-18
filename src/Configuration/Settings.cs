@@ -145,14 +145,22 @@ namespace KeyboardWriterHelper
             string temp = targetPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
             try
             {
-                File.WriteAllText(temp, content, Encoding.UTF8);
+                // Flush the temporary file before replacing the live file.  Using
+                // File.WriteAllText here can leave a file-backed cache dirty when
+                // Windows loses power immediately after the write returns.
+                byte[] bytes = Encoding.UTF8.GetBytes(content);
+                using (FileStream stream = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                {
+                    stream.Write(bytes, 0, bytes.Length);
+                    stream.Flush(true);
+                }
                 if (!File.Exists(targetPath)) File.Move(temp, targetPath);
                 else
                 {
-                    // Copying over is not atomic, but unlike deleting first it never
-                    // leaves no file at all (some network drives cannot Replace).
-                    try { File.Replace(temp, targetPath, null, true); }
-                    catch (PlatformNotSupportedException) { File.Copy(temp, targetPath, true); }
+                    // Replacement is deliberately not downgraded to File.Copy:
+                    // copying over the destination can expose a partially-written
+                    // settings file and defeats the safety guarantee.
+                    File.Replace(temp, targetPath, null, true);
                 }
             }
             finally
