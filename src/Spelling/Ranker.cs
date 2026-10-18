@@ -358,7 +358,7 @@ namespace KeyboardWriterHelper
             }
             c = topTrigramCounts[key];
             int len = f.Length;
-            const int maxFollowers = 8;
+            const int maxFollowers = 32;
             if (len < maxFollowers)
             {
                 int[] newF = new int[len + 1];
@@ -399,61 +399,26 @@ namespace KeyboardWriterHelper
         {
             int[] f = topFollowers[first];
             long[] c = topFollowerCounts[first];
-            if (f == null)
+            int len = f == null ? 0 : f.Length;
+            const int limit = 32;
+            if (len == limit && count <= c[limit - 1]) return;
+            int pos = 0;
+            while (pos < len && c[pos] >= count) pos++;
+            if (pos >= limit) return;
+            if (len < limit)
             {
-                topFollowers[first] = new int[] { second };
-                topFollowerCounts[first] = new long[] { count };
-                return;
+                Array.Resize(ref f, len + 1);
+                Array.Resize(ref c, len + 1);
+                topFollowers[first] = f;
+                topFollowerCounts[first] = c;
             }
-            int len = f.Length;
-            if (len == 1)
+            for (int i = Math.Min(len, limit - 1); i > pos; i--)
             {
-                if (count > c[0])
-                {
-                    topFollowers[first] = new int[] { second, f[0] };
-                    topFollowerCounts[first] = new long[] { count, c[0] };
-                }
-                else
-                {
-                    topFollowers[first] = new int[] { f[0], second };
-                    topFollowerCounts[first] = new long[] { c[0], count };
-                }
-                return;
+                f[i] = f[i - 1];
+                c[i] = c[i - 1];
             }
-            if (len == 2)
-            {
-                if (count > c[0])
-                {
-                    topFollowers[first] = new int[] { second, f[0], f[1] };
-                    topFollowerCounts[first] = new long[] { count, c[0], c[1] };
-                }
-                else if (count > c[1])
-                {
-                    topFollowers[first] = new int[] { f[0], second, f[1] };
-                    topFollowerCounts[first] = new long[] { c[0], count, c[1] };
-                }
-                else
-                {
-                    topFollowers[first] = new int[] { f[0], f[1], second };
-                    topFollowerCounts[first] = new long[] { c[0], c[1], count };
-                }
-                return;
-            }
-            if (count > c[0])
-            {
-                f[2] = f[1]; c[2] = c[1];
-                f[1] = f[0]; c[1] = c[0];
-                f[0] = second; c[0] = count;
-            }
-            else if (count > c[1])
-            {
-                f[2] = f[1]; c[2] = c[1];
-                f[1] = second; c[1] = count;
-            }
-            else if (count > c[2])
-            {
-                f[2] = second; c[2] = count;
-            }
+            f[pos] = second;
+            c[pos] = count;
         }
 
         public string PredictNext(string previous, string prefix)
@@ -464,6 +429,12 @@ namespace KeyboardWriterHelper
         // A guess for a word not started yet must be at least this share of what
         // follows the words before; below it the pill would flash after every word.
         const double MinNextShare = 0.05;
+
+        // The hook and spelling service can share this ranker. Cache only one
+        // active context and bound prefix entries; never retain typed sentences.
+        readonly object predictionGate = new object();
+        readonly Dictionary<string, string> predictionCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        string predictionFirst, predictionPrevious;
 
         // A small deterministic safety net for common continuations. The corpus
         // remains the primary source; these phrases make prediction useful even
@@ -507,6 +478,27 @@ namespace KeyboardWriterHelper
         // the first word in a box is where Tab most often means "next field"
         // ("Name" + Tab must not become "Names ").
         public string PredictNext(string secondPrevious, string previous, string prefix)
+        {
+            lock (predictionGate)
+            {
+                if (!string.Equals(predictionFirst, secondPrevious, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(predictionPrevious, previous, StringComparison.OrdinalIgnoreCase))
+                {
+                    predictionCache.Clear();
+                    predictionFirst = secondPrevious;
+                    predictionPrevious = previous;
+                }
+                string key = prefix ?? "";
+                string result;
+                if (predictionCache.TryGetValue(key, out result)) return result;
+                result = PredictNextUncached(secondPrevious, previous, prefix);
+                if (predictionCache.Count >= 64) predictionCache.Clear();
+                predictionCache[key] = result;
+                return result;
+            }
+        }
+
+        string PredictNextUncached(string secondPrevious, string previous, string prefix)
         {
             if (string.IsNullOrEmpty(previous)) return null;
             string pfx = prefix == null ? "" : prefix.ToLowerInvariant();

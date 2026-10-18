@@ -71,6 +71,11 @@ before building again: Windows locks the exe while it runs.
     confidence margin, so an incidental earlier word cannot force a weak correction.
 - **Smart Compose (on by default)**:
   - Guesses the next word from the words before (`thank ` → `you`, `look forward ` → `to`).
+  - Searches up to 32 followers for each one- or two-word context, making partial
+    completions such as `please rea` → `read` and `send ema` → `email` available
+    from the existing local model. Suggestions still require Tab to accept.
+  - Caches up to 64 prefix results for the active context in memory. No prediction
+    cache is saved to disk. Existing saved Smart Compose preferences are respected.
   - **Tab** accepts the guess only while the pill shows it; at any other moment Tab belongs to
     the program, so moving between form fields or Excel cells works as usual.
   - Backspace right after accepting takes the guess back.
@@ -155,6 +160,7 @@ Personal learning and grammar can also be tested without Windows, using .NET 10:
 ```sh
 dotnet run --project tests/Personalization/Personalization.csproj -c Release
 dotnet run --project tests/Grammar/Grammar.csproj -c Release
+dotnet run --project tests/Prediction/Prediction.csproj -c Release
 ```
 
 These tests compile the production store, policy and engine and exercise learning, restart,

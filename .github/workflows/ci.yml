@@ -20,6 +20,8 @@ jobs:
         run: dotnet run --project tests/Personalization/Personalization.csproj -c Release
       - name: Run portable grammar regressions
         run: dotnet run --project tests/Grammar/Grammar.csproj -c Release
+      - name: Check prediction coverage and report timing
+        run: dotnet run --project tests/Prediction/Prediction.csproj -c Release
 
   build-and-test:
     name: Build & Test (Windows)
