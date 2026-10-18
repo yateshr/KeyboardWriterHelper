@@ -465,6 +465,43 @@ namespace KeyboardWriterHelper
         // follows the words before; below it the pill would flash after every word.
         const double MinNextShare = 0.05;
 
+        // A small deterministic safety net for common continuations. The corpus
+        // remains the primary source; these phrases make prediction useful even
+        // when a compact model has no surviving follower for a perfectly normal
+        // sentence. Values are complete words, never automatic replacements.
+        static readonly Dictionary<string, string[]> CommonNextWords = BuildCommonNextWords();
+
+        static Dictionary<string, string[]> BuildCommonNextWords()
+        {
+            Dictionary<string, string[]> result = new Dictionary<string, string[]>(StringComparer.Ordinal);
+            AddNext(result, "i", "am", "would", "have", "will", "can");
+            AddNext(result, "i would", "like", "love", "be", "rather");
+            AddNext(result, "i am", "going", "sorry", "sure", "happy");
+            AddNext(result, "please", "let", "send", "check", "do");
+            AddNext(result, "please let", "me");
+            AddNext(result, "let me", "know", "help", "check");
+            AddNext(result, "thank you", "for", "very", "so");
+            AddNext(result, "as well", "as");
+            AddNext(result, "look forward", "to");
+            AddNext(result, "in order", "to");
+            AddNext(result, "would like", "to");
+            AddNext(result, "need to", "know", "make", "get", "be");
+            AddNext(result, "going to", "be", "the", "have");
+            AddNext(result, "one of", "the", "my", "our", "these");
+            AddNext(result, "at the", "same", "end", "moment", "time");
+            AddNext(result, "on the", "way", "other", "same", "next");
+            AddNext(result, "for the", "first", "last", "next", "same");
+            AddNext(result, "see you", "soon", "tomorrow", "there");
+            AddNext(result, "have a", "good", "great", "nice", "look");
+            AddNext(result, "have an", "idea", "opportunity", "answer");
+            return result;
+        }
+
+        static void AddNext(Dictionary<string, string[]> result, string key, params string[] words)
+        {
+            result[key] = words;
+        }
+
         // The likely next word, or the likely end of the word being typed (prefix).
         // Only from the words before: with nothing to go on there is no guess, as
         // the first word in a box is where Tab most often means "next field"
@@ -474,7 +511,15 @@ namespace KeyboardWriterHelper
             if (string.IsNullOrEmpty(previous)) return null;
             string pfx = prefix == null ? "" : prefix.ToLowerInvariant();
             int second;
-            if (!numberByWord.TryGetValue(previous.ToLowerInvariant(), out second)) return null;
+            if (!numberByWord.TryGetValue(previous.ToLowerInvariant(), out second))
+            {
+                string[] unknownCommon;
+                string unknownKey = (secondPrevious == null ? "" : secondPrevious.ToLowerInvariant() + " ") + previous.ToLowerInvariant();
+                if (CommonNextWords.TryGetValue(unknownKey, out unknownCommon))
+                    for (int i = 0; i < unknownCommon.Length; i++)
+                        if (Completes(unknownCommon[i], pfx)) return unknownCommon[i];
+                return null;
+            }
 
             // 1. The two words before.
             int first;
@@ -506,6 +551,17 @@ namespace KeyboardWriterHelper
                     if (pfx.Length > 0 || counts[i] >= MinNextShare * asFirst[second]) return candidate;
                     break;
                 }
+            }
+
+            // The statistical model is intentionally conservative. Fall back
+            // only after it has no candidate, and still require a typed prefix
+            // match (or an explicit multi-word phrase) before showing a pill.
+            string key = (secondPrevious == null ? "" : secondPrevious.ToLowerInvariant() + " ") + previous.ToLowerInvariant();
+            string[] common;
+            if (CommonNextWords.TryGetValue(key, out common))
+            {
+                for (int i = 0; i < common.Length; i++)
+                    if (Completes(common[i], pfx)) return common[i];
             }
             return null;
         }
