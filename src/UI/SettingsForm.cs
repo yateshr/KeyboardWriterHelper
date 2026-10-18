@@ -126,7 +126,7 @@ namespace KeyboardWriterHelper
                 SpellingChanged();
             };
 
-            aboutLabel.SetBounds(Left0, 340, Wide, 40);
+            aboutLabel.SetBounds(Left0, 340, Wide, 78);
             aboutLabel.ForeColor = SystemColors.GrayText;
             ShowAbout();
 
@@ -150,7 +150,10 @@ namespace KeyboardWriterHelper
 
         void ShowAbout()
         {
-            aboutLabel.Text = TrayApp.AppName + " " + Program.Version + "\r\nDictionaries in use: " + app.Languages;
+            aboutLabel.Text = TrayApp.AppName + " " + Program.Version + "\r\n" +
+                "Offline spelling, grammar and Smart Compose assistance.\r\n" +
+                "Predictions stay on this computer; nothing you type is uploaded.\r\n" +
+                "Dictionaries in use: " + app.Languages;
         }
 
         static string LanguageName(string tag)

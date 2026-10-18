@@ -69,7 +69,7 @@ before building again: Windows locks the exe while it runs.
     trigrams and progressively weaker topic signals from older words.
   - Context may override the strongest spelling-only answer only by a conservative
     confidence margin, so an incidental earlier word cannot force a weak correction.
-- **Smart Compose (off by default)**:
+- **Smart Compose (on by default)**:
   - Guesses the next word from the words before (`thank ` → `you`, `look forward ` → `to`).
   - **Tab** accepts the guess only while the pill shows it; at any other moment Tab belongs to
     the program, so moving between form fields or Excel cells works as usual.
