@@ -198,6 +198,8 @@ vaccum=vacuum
 
 # Additional high-confidence keyboard and phonetic slips. These are kept
 # explicit (rather than generated) so legitimate words are never rewritten.
+performace=performance
+adfter=after
 abscence=absence
 abscense=absence
 absense=absence

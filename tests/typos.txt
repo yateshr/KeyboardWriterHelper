@@ -196,6 +196,8 @@ rhythm: rythm
 vacuum: vaccum
 
 # Phase 4.1: expanded high-confidence vocabulary
+performance: performace
+after: adfter
 absence: abscence absense
 across: accross
 acknowledge: acknowlege
