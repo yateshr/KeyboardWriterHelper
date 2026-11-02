@@ -32,6 +32,8 @@ namespace KeyboardWriterHelper
             Run("disabled grammar skips learned phrases but permits manual phrases", PhraseSetting);
             Run("clearing learning preserves explicit personal lists", ClearPreservesManual);
             Run("case-only corrections and compose do not train vocabulary", NonSpellingFeedback);
+            Run("a Backspace before punctuation or an edit is no rejection", BackspaceIsNotRejection);
+            Run("version 1 files lose their rejections and keep their choices", VersionOneFile);
             Console.WriteLine("Personalization regression tests: {0} passed, {1} failed", passed, failed);
             return failed == 0 ? 0 : 1;
         }
@@ -285,6 +287,7 @@ namespace KeyboardWriterHelper
             fixture.Type("misp ");
             fixture.Next();
             fixture.Backspace();
+            fixture.Type(" ");
             Equal(0, fixture.Committed.Count, "undoing a selected alternative does not confirm it");
             Equal("misp|miss", fixture.Undone[0], "undo reports the visible alternative, not the first automatic fix");
             Equal(1, fixture.Learning.All()[0].Confirmations, "undo creates one rejection only");
@@ -362,6 +365,7 @@ namespace KeyboardWriterHelper
                 fixture.Start(); fixture.Type("wierd ");
                 Equal("weird ", fixture.Screen.ToString(), "the deterministic built-in correction was exercised");
                 fixture.Backspace();
+                fixture.Type(" ");
             }
             Check(fixture.Learning.IsProtected("wierd"), "repeated explicit undo protects common deterministic corrections");
             fixture.Start();
@@ -414,7 +418,7 @@ namespace KeyboardWriterHelper
             Fixture fixture = new Fixture();
             for (int i = 0; i < 2; i++)
             {
-                fixture.Start(); fixture.Type("he have "); fixture.Backspace();
+                fixture.Start(); fixture.Type("he have "); fixture.Backspace(); fixture.Type(" ");
             }
             Check(fixture.Learning.IsProtected("he have"), "grammar rejection uses the full phrase");
             Check(!fixture.Learning.IsProtected("have"), "phrase rejection must not globally ignore its last word");
@@ -447,6 +451,7 @@ namespace KeyboardWriterHelper
                 fixture.Start(); fixture.Type("clipx ");
                 Equal("private phrase ", fixture.Screen.ToString(), "the expanded clipboard shortcut was exercised");
                 fixture.Backspace();
+                fixture.Type(" ");
             }
             Equal(0, fixture.Learning.All().Length, "manual snippet feedback never persists expanded clipboard contents");
         }
@@ -485,9 +490,9 @@ namespace KeyboardWriterHelper
             Fixture fixture = new Fixture();
             for (int i = 0; i < 2; i++)
             {
-                fixture.Start(); fixture.Type("i "); fixture.Backspace();
-                fixture.Start(); fixture.Type("THe "); fixture.Backspace();
-                fixture.Start(); fixture.Type("one. then "); fixture.Backspace();
+                fixture.Start(); fixture.Type("i "); fixture.Backspace(); fixture.Type(" ");
+                fixture.Start(); fixture.Type("THe "); fixture.Backspace(); fixture.Type(" ");
+                fixture.Start(); fixture.Type("one. then "); fixture.Backspace(); fixture.Type(" ");
             }
             Equal(0, fixture.Learning.All().Length, "capitalization-only rejections do not teach lexical protection");
             fixture.Engine.SmartDashes = true;
@@ -502,6 +507,50 @@ namespace KeyboardWriterHelper
             Check(compose.AcceptPrediction(), "compose prediction was accepted");
             compose.Backspace();
             Equal(0, feedback, "compose acceptance and undo are not spelling feedback");
+        }
+
+        static void BackspaceIsNotRejection()
+        {
+            Fixture fixture = new Fixture();
+            for (int i = 0; i < 3; i++)
+            {
+                // Backspace to take the space away, then a comma: the fix goes back.
+                fixture.Start(); fixture.Type("wierd "); fixture.Backspace(); fixture.Type(",");
+                Equal("weird,", fixture.Screen.ToString(), "punctuation after the Backspace puts the fix back");
+                // Backspace, then more letters: the word is being edited.
+                fixture.Start(); fixture.Type("wierd "); fixture.Backspace(); fixture.Type("o ");
+                // Backspace, then Enter or a click: the undo stands but says nothing.
+                fixture.Start(); fixture.Type("wierd "); fixture.Backspace(); fixture.Engine.Break(true);
+            }
+            Equal(0, fixture.Learning.All().Length, "none of these is a rejection");
+            Equal(6, fixture.Undone.Count, "the edits and the breaks still count as undone, the put-back fixes do not");
+
+            // Putting the fix back and undoing it again is insisting on the typed word.
+            fixture.Start(); fixture.Type("wierd "); fixture.Backspace(); fixture.Type(",");
+            fixture.Backspace();
+            Equal("wierd", fixture.Screen.ToString(), "the second undo takes the comma away with the fix");
+            fixture.Type(",");
+            Equal("wierd,", fixture.Screen.ToString(), "the fix is put back only once");
+            fixture.Start();
+            Equal(1, fixture.Learning.All().Length, "insisting counts as one rejection");
+        }
+
+        static void VersionOneFile()
+        {
+            using (TempFolder folder = new TempFolder())
+            {
+                string path = Path.Combine(folder.Path, "learning.txt");
+                File.WriteAllText(path, "KeyboardWriterHelper.PersonalLearning\t1\n" +
+                    "P\t2\treprot\nP\t1\tchnage\nC\t3\tmisp\tmiss\n");
+                PersonalLearning learning = new PersonalLearning(path, true);
+                Equal<string>(null, learning.LastError, "a version 1 file loads");
+                Check(!learning.IsProtected("reprot"), "rejections counted by the old rule are dropped");
+                Equal(1, learning.All().Length, "only the chosen alternative remains");
+                Equal("miss", learning.GetFix("misp"), "chosen alternatives are kept");
+                learning.Save();
+                Check(File.ReadAllText(path).StartsWith("KeyboardWriterHelper.PersonalLearning\t2\n"), "the file is rewritten as version 2");
+                Equal(1, new PersonalLearning(path, true).All().Length, "the rewritten file loads");
+            }
         }
 
         // Uses the production policy and store with a deterministic dictionary.

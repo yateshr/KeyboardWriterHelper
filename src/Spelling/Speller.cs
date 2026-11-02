@@ -130,6 +130,10 @@ namespace KeyboardWriterHelper
             public string Word;
             public string[] Context;
             public bool Cautious;
+            // Asked ahead of time while the word is typed; nobody waits for it.
+            // Sequence tells the worker whether a newer one has replaced it.
+            public bool Prefetch;
+            public int Sequence;
             public Suggestion Result;
             // Set instead of Word: switch to these spelling choices.
             public SpellOptions Options;
@@ -147,6 +151,8 @@ namespace KeyboardWriterHelper
         const int CacheGeneration = 2500;
 
         readonly BlockingCollection<Request> queue = new BlockingCollection<Request>();
+        // The newest prefetch; older ones still in the queue are skipped.
+        int latestPrefetch;
         readonly object cacheGate = new object();
         Dictionary<string, Suggestion> cache = new Dictionary<string, Suggestion>(StringComparer.Ordinal);
         Dictionary<string, Suggestion> olderCache = new Dictionary<string, Suggestion>(StringComparer.Ordinal);
@@ -211,7 +217,18 @@ namespace KeyboardWriterHelper
                     continue;
                 }
 
+                // A prefetch overtaken by a newer one (the word grew) is not worth
+                // the time; a lookup someone asked for may already be answered.
+                if (request.Prefetch && request.Sequence != Thread.VolatileRead(ref latestPrefetch)) continue;
                 Suggestion result = null;
+                lock (cacheGate)
+                    if (Recall(request.Key, out result) && !request.Prefetch)
+                    {
+                        request.Result = result;
+                        request.Done.Set();
+                        continue;
+                    }
+                if (result != null) continue;
                 try { result = speller.Check(request.Word, request.Context, request.Cautious); }
                 catch (Exception ex) { counters.Error(ex); }
                 if (result != null)
@@ -278,15 +295,9 @@ namespace KeyboardWriterHelper
         public Suggestion Suggest(string word, string[] context, bool cautious, int budgetMs, out bool tooSlow)
         {
             tooSlow = false;
-            string wordKey = (cautious ? "?" : "") + word;
             string[] usedContext = useContext ? context : null;
-            string key = usedContext == null || usedContext.Length == 0 ? wordKey : wordKey + "\u001f" + string.Join("\u001f", usedContext);
-            lock (cacheGate)
-            {
-                Suggestion cached;
-                if (Recall(wordKey, out cached) && (cached.Known || !useContext || usedContext == null || usedContext.Length == 0)) return cached;
-                if (Recall(key, out cached)) return cached;
-            }
+            Suggestion cached;
+            if (Cached(word, usedContext, cautious, out cached)) return cached;
 
             Request request = new Request { Word = word, Context = usedContext, Cautious = cautious };
             try { queue.Add(request); }
@@ -294,6 +305,30 @@ namespace KeyboardWriterHelper
             if (request.Done.Wait(budgetMs)) return request.Result;
             tooSlow = true;
             return null;
+        }
+
+        // Starts the lookup Suggest will make for this word, without waiting.
+        // Called on every letter, so the answer is usually ready by the Space.
+        public void Prefetch(string word, string[] context, bool cautious)
+        {
+            string[] usedContext = useContext ? context : null;
+            Suggestion cached;
+            if (Cached(word, usedContext, cautious, out cached)) return;
+            Request request = new Request { Word = word, Context = usedContext, Cautious = cautious, Prefetch = true,
+                                            Sequence = Interlocked.Increment(ref latestPrefetch) };
+            try { queue.Add(request); }
+            catch (InvalidOperationException) { } // shutting down
+        }
+
+        bool Cached(string word, string[] usedContext, bool cautious, out Suggestion cached)
+        {
+            string wordKey = (cautious ? "?" : "") + word;
+            string key = usedContext == null || usedContext.Length == 0 ? wordKey : wordKey + "\u001f" + string.Join("\u001f", usedContext);
+            lock (cacheGate)
+            {
+                if (Recall(wordKey, out cached) && (cached.Known || !useContext || usedContext == null || usedContext.Length == 0)) return true;
+                return Recall(key, out cached);
+            }
         }
 
         public string PredictNext(string previous, string prefix)
