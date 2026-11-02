@@ -418,3 +418,12 @@ are suppose to=are supposed to
 were suppose to=were supposed to
 am suppose to=am supposed to
 not suppose to=not supposed to
+
+# Windows, the product (not the windows of a house).
+windows xp=Windows XP
+windows defender=Windows Defender
+windows update=Windows Update
+windows server=Windows Server
+windows explorer=Windows Explorer
+windows terminal=Windows Terminal
+microsoft windows=Microsoft Windows

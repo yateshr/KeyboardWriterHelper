@@ -113,7 +113,9 @@ namespace KeyboardWriterHelper
             { "require", "requires" }, { "support", "supports" }, { "include", "includes" },
             { "contain", "contains" }, { "belong", "belongs" }, { "open", "opens" }, { "close", "closes" },
             { "play", "plays" }, { "read", "reads" }, { "write", "writes" }, { "run", "runs" },
-            { "start", "starts" }, { "stop", "stops" }, { "wait", "waits" }, { "finish", "finishes" }
+            { "start", "starts" }, { "stop", "stops" }, { "wait", "waits" }, { "finish", "finishes" },
+            { "behave", "behaves" }, { "happen", "happens" }, { "depend", "depends" }, { "exist", "exists" },
+            { "remain", "remains" }, { "appear", "appears" }, { "occur", "occurs" }
         };
         static readonly Dictionary<string, string> BaseVerbsByThirdPerson = Reverse(ThirdPersonVerbs);
         static readonly HashSet<string> AuxiliaryModifiers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)

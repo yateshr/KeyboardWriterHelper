@@ -366,3 +366,16 @@
 "It dehaves the same " => "It behaves the same "
 "Whats different. " => "What's different. "
 "lolz that is funny " => "lolz that is funny "
+
+# ---- broader built-in fixes ----
+"whats up " => "what's up "
+"I wouldve gone " => "I would've gone "
+"it doesnt work " => "it doesn't work "
+"definately yes " => "definitely yes "
+"the enviroment is " => "the environment is "
+"It behave the same " => "It behaves the same "
+"it happen daily " => "it happens daily "
+"Run windows defender now " => "Run Windows Defender now "
+"I cleaned the windows " => "I cleaned the windows "
+"the windows are open " => "the windows are open "
+"We behave well " => "We behave well "
