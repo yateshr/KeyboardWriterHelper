@@ -120,8 +120,8 @@
 @ reset
 
 # ---- next suggestion ----
-"teh {NEXT}" => "ten "
-"teh {NEXT}{NEXT}" => "tea "
+# Which other words are offered depends on the dictionaries Windows has, so
+# these use "ther", which has several ("teh" may have only "the").
 "ther {NEXT}" => "their "
 "ther {NEXT}{NEXT}" => "the "
 "Ther {NEXT}" => "Their "
