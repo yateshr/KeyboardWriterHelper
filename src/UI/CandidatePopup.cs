@@ -110,50 +110,13 @@ namespace KeyboardWriterHelper
             if (!Visible) Show();
         }
 
+        // Always the top right corner of the screen being typed on, so it is in the
+        // same place every time and never covers the text.
         void PositionPopup(IntPtr foreground)
         {
-            Point target = Point.Empty;
-
-            bool foundCaret = false;
-            if (foreground != IntPtr.Zero)
-            {
-                uint tid = Native.GetWindowThreadProcessId(foreground, IntPtr.Zero);
-                Native.GUITHREADINFO gui = new Native.GUITHREADINFO();
-                gui.cbSize = Marshal.SizeOf(typeof(Native.GUITHREADINFO));
-                if (Native.GetGUIThreadInfo(tid, ref gui) && gui.hwndCaret != IntPtr.Zero && gui.rcCaret.Right > gui.rcCaret.Left)
-                {
-                    Native.POINT pt = new Native.POINT { X = gui.rcCaret.Left, Y = gui.rcCaret.Bottom + 4 };
-                    if (Native.ClientToScreen(gui.hwndCaret, ref pt))
-                    {
-                        target = new Point(pt.X, pt.Y);
-                        foundCaret = true;
-                    }
-                }
-            }
-
-            Screen scr = Screen.FromPoint(foundCaret ? target : (foreground != IntPtr.Zero ? Screen.FromHandle(foreground).WorkingArea.Location : Cursor.Position));
-            if (foundCaret)
-            {
-                int left = Math.Max(scr.WorkingArea.Left + 5, Math.Min(target.X, scr.WorkingArea.Right - Width - 5));
-                int top = target.Y;
-                if (top + Height > scr.WorkingArea.Bottom)
-                    top = Math.Max(scr.WorkingArea.Top + 5, target.Y - Height - 24);
-                Location = new Point(left, top);
-            }
-            else
-            {
-                Native.RECT rect;
-                if (foreground != IntPtr.Zero && Native.GetWindowRect(foreground, out rect) && rect.Right > rect.Left && rect.Bottom > rect.Top)
-                {
-                    int left = Math.Max(scr.WorkingArea.Left + 10, Math.Min(rect.Right - Width - 20, scr.WorkingArea.Right - Width - 10));
-                    int top = Math.Max(scr.WorkingArea.Top + 10, Math.Min(rect.Bottom - Height - 20, scr.WorkingArea.Bottom - Height - 10));
-                    Location = new Point(left, top);
-                }
-                else
-                {
-                    Location = new Point(scr.WorkingArea.Right - Width - 20, scr.WorkingArea.Bottom - Height - 20);
-                }
-            }
+            Screen scr = foreground != IntPtr.Zero ? Screen.FromHandle(foreground) : Screen.FromPoint(Cursor.Position);
+            Rectangle area = scr.WorkingArea;
+            Location = new Point(area.Right - Width - 20, area.Top + 20);
         }
 
         public void Dismiss()
