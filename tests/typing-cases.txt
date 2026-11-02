@@ -352,3 +352,12 @@
 # ---- a capital after a word fixed on ? or ! ----
 "did you recieve? yes " => "did you receive? Yes "
 "is it grate! yes " => "is it grate! Yes "
+
+# ---- its / it's ----
+"its going to rain " => "it's going to rain "
+"its so cold " => "it's so cold "
+"Its raining " => "It's raining "
+"its time to go " => "it's time to go "
+"its own way " => "its own way "
+"the dog wagged its tail " => "the dog wagged its tail "
+"its about page " => "its about page "
