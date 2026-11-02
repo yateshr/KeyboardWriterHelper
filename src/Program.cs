@@ -474,7 +474,7 @@ namespace KeyboardWriterHelper
         {
             TextWriter o = Out();
             int problems = 0;
-            foreach (string name in new string[] { "fixes.txt", "phrase-fixes.txt" })
+            foreach (string name in new string[] { "fixes.txt", "fixes-open-source.txt", "phrase-fixes.txt" })
             {
                 HashSet<string> keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (string line in Data.Lines(name))
@@ -504,6 +504,12 @@ namespace KeyboardWriterHelper
                         }
             }
             HashSet<string> never = Data.Words("never-correct.txt");
+            foreach (KeyValuePair<string, string> fix in Data.Pairs("fixes-open-source.txt"))
+                if (never.Contains(fix.Key))
+                {
+                    o.WriteLine("\"" + fix.Key + "\" is in both fixes-open-source.txt and never-correct.txt");
+                    problems++;
+                }
             foreach (KeyValuePair<string, string> fix in Data.Pairs("fixes.txt"))
                 if (never.Contains(fix.Key))
                 {

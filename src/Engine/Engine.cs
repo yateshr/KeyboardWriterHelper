@@ -44,8 +44,18 @@ namespace KeyboardWriterHelper
         const int MaxContextWords = 6;
 
         // The built-in lists; each file in data\ says at its top what it is for.
-        static readonly Dictionary<string, string> CommonFixes = Data.Pairs("fixes.txt");
+        static readonly Dictionary<string, string> CommonFixes = LoadFixes();
         static readonly Dictionary<string, string> PhraseFixes = Data.Pairs("phrase-fixes.txt");
+
+        // fixes.txt is written by hand and wins; fixes-open-source.txt is generated
+        // from open misspelling lists (see THIRD_PARTY_NOTICES.md).
+        static Dictionary<string, string> LoadFixes()
+        {
+            Dictionary<string, string> fixes = Data.Pairs("fixes.txt");
+            foreach (KeyValuePair<string, string> fix in Data.Pairs("fixes-open-source.txt"))
+                if (!fixes.ContainsKey(fix.Key)) fixes.Add(fix.Key, fix.Value);
+            return fixes;
+        }
         static readonly HashSet<string> NeverCorrect = Data.Words("never-correct.txt");
         static readonly HashSet<string> OtherLanguage = Data.Words("other-language.txt");
         static readonly HashSet<string> Abbreviations = Data.Words("abbreviations.txt");
