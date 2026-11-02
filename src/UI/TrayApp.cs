@@ -509,6 +509,9 @@ namespace KeyboardWriterHelper
                 "slowest key handling (ms): " + counters.SlowestKeyMs + "\r\n" +
                 "errors: " + counters.Errors + "\r\n" +
                 "last error: " + (counters.LastError ?? "none") + "\r\n";
+            string[] skipped = counters.SkippedLines();
+            if (skipped.Length > 0)
+                body += "keys ignored (program: reason = count):\r\n  " + string.Join("\r\n  ", skipped) + "\r\n";
             if (body == lastStats) return;
             try
             {

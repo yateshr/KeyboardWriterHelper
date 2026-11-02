@@ -114,6 +114,31 @@ namespace KeyboardWriterHelper
     {
         public int Keys, Words, Corrections, Undone, TooSlow, Errors, SlowestKeyMs;
         public string LastError;
+        // Keys the app ignored, by program and reason ("WINWORD.EXE: full-screen
+        // window"). Names of programs and numbers only, never typed text.
+        readonly Dictionary<string, int> skipped = new Dictionary<string, int>();
+
+        public void Skip(string app, string reason)
+        {
+            string key = (string.IsNullOrEmpty(app) ? "(unknown)" : app) + ": " + reason;
+            lock (skipped)
+            {
+                int n;
+                skipped.TryGetValue(key, out n);
+                if (n > 0 || skipped.Count < 50) skipped[key] = n + 1;
+            }
+        }
+
+        public string[] SkippedLines()
+        {
+            lock (skipped)
+            {
+                List<string> lines = new List<string>();
+                foreach (KeyValuePair<string, int> pair in skipped) lines.Add(pair.Key + " = " + pair.Value);
+                lines.Sort(StringComparer.Ordinal);
+                return lines.ToArray();
+            }
+        }
 
         public void Error(Exception ex)
         {

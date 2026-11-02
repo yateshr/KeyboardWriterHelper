@@ -413,9 +413,14 @@ namespace KeyboardWriterHelper
                 engine.Break(true);
             }
 
-            if (repeat || excludedApps.Contains(lastApp) || IsBlocked(foreground) || IsFullScreen(foreground) ||
-                IsPasswordBox(foregroundThread))
+            string skipReason = repeat ? null :
+                excludedApps.Contains(lastApp) ? "in the excluded programs list" :
+                IsBlocked(foreground) ? "Windows would not let the app type there (run as administrator?)" :
+                IsFullScreen(foreground) ? "full-screen window treated as a game" :
+                IsPasswordBox(foregroundThread) ? "password box" : "";
+            if (repeat || skipReason != "")
             {
+                if (skipReason != null) counters.Skip(lastApp, skipReason);
                 engine.Break(false);
                 return false;
             }
