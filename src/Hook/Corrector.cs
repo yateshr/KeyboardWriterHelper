@@ -113,6 +113,7 @@ namespace KeyboardWriterHelper
             engine.Corrected += OnCorrected;
             engine.Undone += OnUndone;
             personalization.Attach(engine);
+            engine.Prefetch = spelling.Prefetch;
             personalization.Learned += delegate(string typed) { if (Learned != null) Learned(typed); };
             engine.Changed += delegate(string typed, string before, string now) { if (Changed != null) Changed(typed, before, now); };
             engine.CandidateOffered += delegate(string fix, string[] choices) { if (CandidateOffered != null) CandidateOffered(fix, choices); };

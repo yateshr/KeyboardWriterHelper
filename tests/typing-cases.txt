@@ -2,7 +2,8 @@
 #
 #     "what is typed" => "what must be on screen"
 #
-# {BS} is Backspace, {NEXT} the next-suggestion shortcut. A line starting with @
+# {BS} is Backspace, {NEXT} the next-suggestion shortcut, {CLICK} a mouse click
+# (the caret may have moved), {ENTER} Enter. A line starting with @
 # sets up the cases below it:
 #     @ word tarun               add to My words
 #     @ fix brb=be right back    add to My fixes
@@ -38,6 +39,13 @@
 "teh {BS}" => "teh"
 "teh {BS} " => "teh "
 "teh {BS}{BS}e " => "tee "
+# Backspace and then punctuation only took the space away: the fix goes back.
+"reprot {BS}, then " => "report, then "
+"reprot {BS}. then " => "report. Then "
+# Undone twice, it stays as typed.
+"reprot {BS},{BS}, then " => "reprot, then "
+# Backspace and more letters: the word is being edited, and is checked again.
+"reprot {BS}s then " => "reports then "
 
 # ---- two capitals at the start of a word ----
 "THe cat " => "The cat "
@@ -322,3 +330,25 @@
 "a <- b " => "a ← b "
 "a -- {BS}" => "a --"
 @ reset
+
+# ---- the pronoun I ----
+"i'm here and i'd go " => "I'm here and I'd go "
+"i'll see, i've seen " => "I'll see, I've seen "
+"you and i. we " => "you and I. We "
+"can i? yes " => "can I? Yes "
+"yaar i think so " => "yaar I think so "
+# A list marker at the start of a line stays.
+"i. first " => "i. first "
+"see (i) and [i] " => "see (i) and [i] "
+# After a click the caret could be anywhere, so the first word is not checked -
+# except a lone "i".
+"{CLICK}i think so " => "I think so "
+"{CLICK}i'm sure " => "I'm sure "
+"{CLICK}teh cat " => "teh cat "
+"{CLICK}ing more " => "ing more "
+# Only the first word: after the Space the text is known again.
+"{CLICK}teh teh cat " => "teh the cat "
+
+# ---- a capital after a word fixed on ? or ! ----
+"did you recieve? yes " => "did you receive? Yes "
+"is it grate! yes " => "is it grate! Yes "

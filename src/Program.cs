@@ -124,12 +124,20 @@ namespace KeyboardWriterHelper
             }
 
             // Types the text and returns what is on screen. {BS} stands for
-            // Backspace, {NEXT} for the next-suggestion shortcut, {TAB} for Tab / Smart Compose.
+            // Backspace, {NEXT} for the next-suggestion shortcut, {TAB} for Tab / Smart Compose,
+            // {CLICK} for a mouse click (the caret may have moved), {ENTER} for Enter.
             public string Type(string text)
             {
-                foreach (char c in text.Replace("{BS}", "\b").Replace("{NEXT}", SelfTestForm.NextKey.ToString()).Replace("{TAB}", "\t"))
+                foreach (char c in text.Replace("{BS}", "\b").Replace("{NEXT}", SelfTestForm.NextKey.ToString()).Replace("{TAB}", "\t")
+                                       .Replace("{CLICK}", "\u0002").Replace("{ENTER}", "\n"))
                 {
-                    if (c == '\b')
+                    if (c == '\u0002') Engine.Break(false);
+                    else if (c == '\n')
+                    {
+                        Engine.Break(true);
+                        Screen.Append('\n');
+                    }
+                    else if (c == '\b')
                     {
                         if (!Engine.Backspace() && Screen.Length > 0) Screen.Length--;
                     }

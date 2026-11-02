@@ -101,6 +101,8 @@ namespace KeyboardWriterHelper
                 Equal("The files are ", fixture.Type("The files is "));
                 fixture.Type("{BS}");
                 Equal("The files is", fixture.Screen.ToString());
+                // The Space keeps it as typed: that is the rejection.
+                fixture.Type(" ");
             }
             Check(fixture.Learning.All().Length == 1, "only explicit rejection evidence should be retained");
             fixture.Start();
@@ -118,7 +120,7 @@ namespace KeyboardWriterHelper
             {
                 fixture.Start();
                 Equal("He doesn't like ", fixture.Type("He doesn't likes "));
-                fixture.Type("{BS}");
+                fixture.Type("{BS} ");
             }
             fixture.Start();
             Equal("He doesn't likes it. ", fixture.Type("He doesn't likes it. "));
@@ -134,7 +136,7 @@ namespace KeyboardWriterHelper
             {
                 fixture.Start();
                 Equal("Everyone has arrived ", fixture.Type("Everyone have arrived "));
-                fixture.Type("{BS}");
+                fixture.Type("{BS} ");
             }
             fixture.Start();
             Equal("Everyone have arrived. ", fixture.Type("Everyone have arrived. "));

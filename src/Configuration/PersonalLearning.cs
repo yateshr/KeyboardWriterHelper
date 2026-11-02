@@ -30,7 +30,11 @@ namespace KeyboardWriterHelper
         const int MaxEntries = 2000, MaxWords = 4, MaxWordLength = 40;
         const int MaxTextLength = MaxWords * (MaxWordLength + 1) - 1;
         const int MaxLineLength = MaxTextLength * 2 + 16, MaxFileBytes = 2 * 1024 * 1024;
-        const string Header = "KeyboardWriterHelper.PersonalLearning\t1";
+        const string Header = "KeyboardWriterHelper.PersonalLearning\t2";
+        // Version 1 counted any Backspace straight after a fix as a rejection,
+        // including the one that only takes a space away to type a comma. Its
+        // rejections are dropped on loading; its chosen alternatives are kept.
+        const string HeaderVersion1 = "KeyboardWriterHelper.PersonalLearning\t1";
         readonly object gate = new object(), saveGate = new object();
         readonly Dictionary<string, PersonalLearningEntry> entries = new Dictionary<string, PersonalLearningEntry>(StringComparer.OrdinalIgnoreCase);
         readonly string path;
@@ -237,7 +241,10 @@ namespace KeyboardWriterHelper
                 {
                     string header = ReadLine(reader);
                     if (header != null && header.Length != 0 && header[0] == '\uFEFF') header = header.Substring(1);
-                    if (header != Header) throw new InvalidDataException("The file format or version is unsupported.");
+                    bool version1 = header == HeaderVersion1;
+                    if (header != Header && !version1) throw new InvalidDataException("The file format or version is unsupported.");
+                    // Rewritten in the current version at the next save.
+                    if (version1) revision++;
                     string line;
                     while ((line = ReadLine(reader)) != null)
                     {
@@ -252,6 +259,7 @@ namespace KeyboardWriterHelper
                             !TryNormalize(fields[2], out key) || key != fields[2] ||
                             (!preserve && (!TryNormalize(fields[3], out fix) || fix != fields[3] || string.Equals(key, fix, StringComparison.OrdinalIgnoreCase))) ||
                             loaded.ContainsKey(key)) throw new InvalidDataException("The file contains an invalid entry.");
+                        if (version1 && preserve) continue;
                         loaded.Add(key, new PersonalLearningEntry(key, fix, count));
                     }
                 }

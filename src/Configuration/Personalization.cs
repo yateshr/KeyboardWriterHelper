@@ -41,7 +41,7 @@ namespace KeyboardWriterHelper
         public void Attach(Engine engine)
         {
             engine.Corrected += OnCorrected;
-            engine.Undone += OnUndone;
+            engine.Rejected += OnRejected;
             engine.ChoiceCommitted += OnChoiceCommitted;
         }
 
@@ -63,7 +63,9 @@ namespace KeyboardWriterHelper
             return eligible;
         }
 
-        void OnUndone(string typed, string fix)
+        // Backspace right after a fix and then a Space: keep the word as typed.
+        // A Backspace followed by punctuation or more typing is no rejection.
+        void OnRejected(string typed, string fix)
         {
             if (CanRecord(typed) && learning.RecordRejection(typed) && Learned != null) Learned(typed);
         }

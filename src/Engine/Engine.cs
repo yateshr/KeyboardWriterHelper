@@ -36,6 +36,8 @@ namespace KeyboardWriterHelper
             // last what was typed. Choice is the one on screen.
             public string[] Choices;
             public int Choice;
+            // Undone, then put back because punctuation followed the Backspace.
+            public bool Redone;
         }
 
         const int MaxWordLength = 40;
@@ -173,6 +175,20 @@ namespace KeyboardWriterHelper
         // True while the caret sits in text we cannot vouch for (after a paste, an
         // arrow key, a URL-like token...). Cleared by the next whitespace.
         bool tainted;
+        // Tainted only because the caret may have moved (a click, an arrow key,
+        // a shortcut), not because the text is known to be odd. The letters
+        // typed since are kept in `jumped`: a lone "i" there is still "I".
+        bool softTaint;
+        readonly StringBuilder jumped = new StringBuilder();
+        // A fix on ! or ? (or a fix put back with one) ended a sentence; the
+        // Space that follows gives the next word its capital.
+        bool sentenceEndPending;
+        // Backspace put the typed word back. What the user types next decides
+        // what that meant: punctuation puts the fix back (the Backspace only took
+        // the space away), a Space keeps the word as typed (a real rejection).
+        Undo undone;
+        // The fix was put back once and then undone again: the user means it.
+        bool undoneInsisted;
         bool afterSentenceEnd = true;
         bool wordAtSentenceStart;
         // Set once a Hindi or Gujarati word is seen; lasts until the next clean break.
@@ -234,7 +250,16 @@ namespace KeyboardWriterHelper
 
         // (typed, fix). A phrase fix reports both words.
         public event Action<string, string> Corrected;
+        // A fix undone with Backspace that stayed undone (reported when the user
+        // types on, not at the Backspace itself).
         public event Action<string, string> Undone;
+        // An undone fix the user then kept as typed with a Space: the only
+        // undo that counts as "do not correct this".
+        public event Action<string, string> Rejected;
+        // Looks a word up ahead of time, while it is still being typed, so the
+        // answer is ready when Space comes: (word, context, cautious) exactly
+        // as the lookup at Space will ask it. May be null.
+        public Action<string, string[], bool> Prefetch;
         // (typed, fix before, fix now): another candidate was picked.
         public event Action<string, string, string> Changed;
         // Only the final explicit candidate selection, when typing resumes:
@@ -384,8 +409,12 @@ namespace KeyboardWriterHelper
         // clean = the caret is most likely at the start of fresh text.
         public void Break(bool clean)
         {
+            SettleUndo(false);
             Clear();
             undo = null;
+            sentenceEndPending = false;
+            softTaint = !clean;
+            jumped.Length = 0;
             predictionUndo = null;
             DismissPrediction();
             capNext = false;
@@ -410,24 +439,39 @@ namespace KeyboardWriterHelper
             if (undo != null && CandidateDismissed != null) CandidateDismissed();
             undo = null;
             predictionUndo = null;
+            bool endPending = sentenceEndPending;
+            sentenceEndPending = false;
+            if (undone != null)
+            {
+                if (TryRedo(c)) return true;
+                // A Space with the word untouched keeps it as typed.
+                SettleUndo(c == ' ' && !tainted && word.ToString() == undone.Original);
+            }
             bool secondSpace = spaceAfterWord && c == ' ';
             spaceAfterWord = madeFullStop = false;
 
             if (symbols.Length < 16) symbols.Append(c);
             else { symbols.Remove(0, 1); symbols.Append(c); }
 
-            if (char.IsLetter(c) || (c == '\'' && word.Length > 0 && trail.Length == 0))
+            if (char.IsLetter(c) || (c == '\'' && word.Length > 0 && trail.Length == 0) ||
+                (c == '\'' && tainted && softTaint && jumped.Length > 0))
             {
-                if (tainted) return false;
+                if (tainted)
+                {
+                    if (softTaint && jumped.Length < 4) jumped.Append(c);
+                    else softTaint = false;
+                    return false;
+                }
                 // A letter right after punctuation: "example.com", "word,word". Not prose.
-                if (trail.Length > 0) { Clear(); tainted = true; DismissPrediction(); return false; }
+                if (trail.Length > 0) { Clear(); tainted = true; softTaint = false; DismissPrediction(); return false; }
                 if (word.Length == 0)
                 {
                     wordAtSentenceStart = afterSentenceEnd;
                     afterSentenceEnd = false;
                 }
                 word.Append(c);
-                if (word.Length > MaxWordLength) { Clear(); tainted = true; DismissPrediction(); return false; }
+                if (word.Length > MaxWordLength) { Clear(); tainted = true; softTaint = false; DismissPrediction(); return false; }
+                PrefetchWord();
                 OfferPrediction(false);
                 return false;
             }
@@ -455,6 +499,8 @@ namespace KeyboardWriterHelper
                 string shown = swallowed ? undo.Fix : last;
                 Clear();
                 tainted = false;
+                softTaint = false;
+                jumped.Length = 0;
                 if (plain)
                 {
                     if (swallowed) SetContextAfterCorrection(undo);
@@ -467,7 +513,8 @@ namespace KeyboardWriterHelper
                 spaceAfterWord = plain;
                 if (hadWord)
                     capNext = ending.Length > 0 && IsSentenceEnd(ending[ending.Length - 1]) &&
-                              (ending[ending.Length - 1] != '.' || !IsAbbreviation(last));
+                              (ending[ending.Length - 1] != '.' || !IsAbbreviation(last) || (swallowed && shown == "I"));
+                else if (endPending) capNext = true;
                 OfferPrediction(capNext);
                 return swallowed;
             }
@@ -479,10 +526,12 @@ namespace KeyboardWriterHelper
                 DismissPrediction();
                 if (IsSentenceEnd(c)) afterSentenceEnd = true;
                 capNext = false;
+                sentenceEndPending = IsSentenceEnd(c);
                 ResetHistory();
                 Clear();
                 // Whatever follows with no space is part of the same token.
                 tainted = true;
+                softTaint = false;
                 return true;
             }
 
@@ -501,10 +550,87 @@ namespace KeyboardWriterHelper
             if (!tainted && word.Length == 0 && IsOpener(c)) return false;
 
             if (IsSentenceEnd(c)) afterSentenceEnd = true;
+            // "receive?!" or "receive?)": the sentence still ends here.
+            if (endPending && ".!?\")]".IndexOf(c) >= 0) sentenceEndPending = true;
             Clear();
             capNext = false;
             tainted = true;
+            softTaint = false;
             return false;
+        }
+
+        // Backspace straight after a fix put the typed word back, and now
+        // punctuation follows: the Backspace was only to take the space away
+        // ("report " -> Backspace -> ","), so the fix goes back with it. Not a
+        // second time for the same word, and not if the word was edited.
+        bool TryRedo(char c)
+        {
+            Undo u = undone;
+            if (undoneInsisted || ".,;:!?".IndexOf(c) < 0 || tainted || trail.Length > 0 || word.ToString() != u.Original)
+                return false;
+            emit(u.Lead.Length + u.Original.Length, u.Fix + c);
+            undone = null;
+            u.Terminator = c.ToString();
+            u.Redone = true;
+            undo = u;
+            DismissPrediction();
+            ResetHistory();
+            Clear();
+            capNext = false;
+            if (IsSentenceEnd(c))
+            {
+                afterSentenceEnd = true;
+                sentenceEndPending = c != '.' || !IsAbbreviation(u.Original);
+            }
+            tainted = true;
+            softTaint = false;
+            if (CandidateOffered != null) CandidateOffered(u.Fix, u.Choices);
+            return true;
+        }
+
+        // The undo made by Backspace is final: report it. keptAsTyped = the
+        // user ended the word with a Space without changing it.
+        void SettleUndo(bool keptAsTyped)
+        {
+            Undo u = undone;
+            if (u == null) return;
+            bool insisted = undoneInsisted;
+            undone = null;
+            undoneInsisted = false;
+            string typed = u.Lead + u.Original;
+            if (Undone != null) Undone(typed, u.Fix);
+            if ((keptAsTyped || insisted) && Rejected != null) Rejected(typed, u.Fix);
+        }
+
+        // Asks for the lookup the Space will need, while the word is typed.
+        // Mirrors the checks DecideWord makes before it calls the speller.
+        void PrefetchWord()
+        {
+            if (Prefetch == null || otherLanguage || word.Length < 2) return;
+            string w = word.ToString();
+            if (IForm(w) != null || w[w.Length - 1] == '\'' || OtherLanguage.Contains(w) || isIgnored(w) || ownFix(w) != null) return;
+            for (int i = 1; i < w.Length; i++)
+            {
+                if (!char.IsUpper(w[i])) continue;
+                if (!FixTwoCapitals || !IsShiftSlip(w)) return;
+                w = w.Substring(0, 1) + char.ToLowerInvariant(w[1]) + w.Substring(2);
+                break;
+            }
+            if (!HasVowel(w) || HasTripledLetter(w) || NeverCorrect.Contains(w) || CommonFixes.ContainsKey(w)) return;
+            Prefetch(w, ContextSnapshot(), char.IsUpper(w[0]) || w.Length <= Ranker.ShortWord);
+        }
+
+        // "i" and its contractions as the pronoun: "I", "I'm", "I'd", "I'll",
+        // "I've". Null for anything else.
+        static string IForm(string w)
+        {
+            if (w.Length == 0 || w[0] != 'i') return null;
+            if (w == "i") return "I";
+            switch (w)
+            {
+                case "i'm": case "i'd": case "i'll": case "i've": return "I" + w.Substring(1);
+                default: return null;
+            }
         }
 
         // "-- " -> "— " and the like, when the setting is on. sym: the last
@@ -554,6 +680,9 @@ namespace KeyboardWriterHelper
         // and that word is not corrected again. Otherwise it edits the tracked word.
         public bool Backspace()
         {
+            // Editing the word an undo put back: the undo stands, but it was not
+            // a "keep it as typed".
+            SettleUndo(false);
             if (predictionUndo != null)
             {
                 PredictionUndo pu = predictionUndo;
@@ -601,8 +730,13 @@ namespace KeyboardWriterHelper
                 thirdPrevious = u.ThirdPrevious;
                 RestoreContext(u.Context);
                 if (CandidateDismissed != null) CandidateDismissed();
-                // Not an undo if "next suggestion" had already brought the typed text back.
-                if (u.Fix != u.Lead + u.Original && Undone != null) Undone(u.Lead + u.Original, u.Fix);
+                // Not an undo if "next suggestion" had already brought the typed text
+                // back. What it means is settled by the next key (SettleUndo).
+                if (u.Fix != u.Lead + u.Original)
+                {
+                    undone = u;
+                    undoneInsisted = u.Redone;
+                }
                 return true;
             }
             if (trail.Length > 0) trail.Length--;
@@ -614,6 +748,7 @@ namespace KeyboardWriterHelper
             else
             {
                 tainted = true;
+                softTaint = false;
                 ResetHistory();
             }
             return false;
@@ -647,7 +782,15 @@ namespace KeyboardWriterHelper
         // terminator = any held-back punctuation plus the space being typed.
         bool TryCorrect(string terminator)
         {
-            if (tainted || word.Length == 0) return false;
+            if (tainted)
+            {
+                // After a click or an arrow key the caret could be anywhere, so the
+                // letters typed since are no safe word - except a lone "i" or "i'm".
+                if (!softTaint || IForm(jumped.ToString()) == null) return false;
+                word.Length = 0;
+                word.Append(jumped);
+            }
+            if (word.Length == 0) return false;
             string original = word.ToString();
             if (original == keepAsTyped) return false;
             lead = "";
@@ -1180,9 +1323,18 @@ namespace KeyboardWriterHelper
             }
 
             if (OtherLanguage.Contains(w)) otherLanguage = true;
-            if (otherLanguage || isIgnored(w)) return null;
-            // "i think", "i, too" - but not the list markers "i." and "i)".
-            if (w == "i") return " ,?!".IndexOf(terminator[0]) >= 0 ? "I" : null;
+            if (isIgnored(w)) return null;
+            // "i think", "i'm", "you and i." - also in a line with Hindi or Gujarati
+            // words, where a lone "i" is nothing else. Not "(i)", "[i]" nor the list
+            // marker "i." at the start of a line.
+            string pronoun = IForm(w);
+            if (pronoun != null)
+            {
+                char end = terminator[0];
+                if (w == "i" && (end == ')' || end == ']' || (".;:".IndexOf(end) >= 0 && wordAtSentenceStart))) return null;
+                return pronoun;
+            }
+            if (otherLanguage) return null;
             if (w.Length < 2 || w[w.Length - 1] == '\'') return null;
 
             // A capital after the first letter means an acronym or camelCase, which
