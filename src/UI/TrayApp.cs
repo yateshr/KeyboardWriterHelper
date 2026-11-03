@@ -573,16 +573,29 @@ namespace KeyboardWriterHelper
             using (Bitmap bmp = new Bitmap(32, 32))
             {
                 using (Graphics g = Graphics.FromImage(bmp))
-                using (Brush fill = new SolidBrush(back))
-                using (Font font = new Font("Segoe UI", 15f, FontStyle.Bold, GraphicsUnit.Pixel))
+                // The logo in assets/: a rounded square, "Aa" and a check mark,
+                // in the colour that shows the state.
+                using (GraphicsPath shape = new GraphicsPath())
+                using (LinearGradientBrush fill = new LinearGradientBrush(new Point(0, 0), new Point(32, 32),
+                    Color.FromArgb(Math.Min(255, back.R + 14), Math.Min(255, back.G + 34), Math.Min(255, back.B + 17)), back))
+                using (Font font = new Font("Segoe UI", 13.5f, FontStyle.Bold, GraphicsUnit.Pixel))
+                using (Pen check = new Pen(Color.White, 2f))
                 using (StringFormat center = new StringFormat())
                 {
                     g.SmoothingMode = SmoothingMode.AntiAlias;
                     g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
-                    g.FillEllipse(fill, 1, 1, 30, 30);
+                    shape.AddArc(0, 0, 14, 14, 180, 90);
+                    shape.AddArc(17, 0, 14, 14, 270, 90);
+                    shape.AddArc(17, 17, 14, 14, 0, 90);
+                    shape.AddArc(0, 17, 14, 14, 90, 90);
+                    shape.CloseFigure();
+                    g.FillPath(fill, shape);
                     center.Alignment = StringAlignment.Center;
                     center.LineAlignment = StringAlignment.Center;
-                    g.DrawString("Aa", font, Brushes.White, new RectangleF(0, 0, 32, 31), center);
+                    g.DrawString("Aa", font, Brushes.White, new RectangleF(0, -2, 32, 28), center);
+                    check.StartCap = check.EndCap = LineCap.Round;
+                    check.LineJoin = LineJoin.Round;
+                    g.DrawLines(check, new PointF[] { new PointF(9.5f, 25f), new PointF(13f, 27.5f), new PointF(22f, 23f) });
                 }
                 IntPtr hIcon = bmp.GetHicon();
                 try
