@@ -60,6 +60,7 @@ jobs:
           Copy-Item KeyboardWriterHelper.exe -Destination "$net40Folder/KeyboardWriterHelper.exe"
           Copy-Item README.md -Destination "$net40Folder/README.md"
           Copy-Item ROADMAP.md -Destination "$net40Folder/ROADMAP.md"
+          Copy-Item CHANGELOG.md -Destination "$net40Folder/CHANGELOG.md"
           Compress-Archive -Path "$net40Folder/*" -DestinationPath "release-dist/KeyboardWriterHelper-$tag-net40.zip" -Force
           Remove-Item -Recurse -Force $net40Folder
 
@@ -69,8 +70,13 @@ jobs:
           Copy-Item dist/net10-x64/KeyboardWriterHelper.exe -Destination "$netFolder/KeyboardWriterHelper.exe"
           Copy-Item README.md -Destination "$netFolder/README.md"
           Copy-Item ROADMAP.md -Destination "$netFolder/ROADMAP.md"
+          Copy-Item CHANGELOG.md -Destination "$netFolder/CHANGELOG.md"
           Compress-Archive -Path "$netFolder/*" -DestinationPath "release-dist/KeyboardWriterHelper-$tag-win-x64.zip" -Force
           Remove-Item -Recurse -Force $netFolder
+
+          # Brand assets
+          Copy-Item assets/logo.png -Destination release-dist/KeyboardWriterHelper-logo.png
+          Copy-Item assets/icon.ico -Destination release-dist/KeyboardWriterHelper-icon.ico
 
           # Compute SHA-256 Checksums
           Set-Location release-dist
@@ -87,5 +93,12 @@ jobs:
           if (-not $tag) { $tag = "${{ github.ref_name }}" }
           if (-not $tag -or $tag -eq "main") { $tag = "v" + (Get-Content version.txt).Trim() }
 
+          # Notes: the changelog section of this version
+          $ver = $tag.TrimStart("v")
+          $text = Get-Content CHANGELOG.md -Raw
+          $m = [regex]::Match($text, "(?ms)^## $([regex]::Escape($ver))[ \t]*\r?\n(.*?)(?=^## |\z)")
+          $notes = if ($m.Success) { $m.Groups[1].Value.Trim() } else { "See CHANGELOG.md." }
+          Set-Content release-notes.md ($notes + "`n`nFull changelog: CHANGELOG.md")
+
           $assets = Get-ChildItem -Path release-dist | ForEach-Object { $_.FullName }
-          gh release create "$tag" $assets --title "Keyboard Writer Helper $tag" --generate-notes
+          gh release create "$tag" $assets --title "Keyboard Writer Helper $tag" --notes-file release-notes.md

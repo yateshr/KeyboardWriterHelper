@@ -1,4 +1,8 @@
+<p align="center"><img src="assets/logo.png" alt="Keyboard Writer Helper logo" width="128"></p>
+
 # Keyboard Writer Helper
+
+[Changelog](CHANGELOG.md) · [Third-party credits](THIRD_PARTY_NOTICES.md) · [Releases](https://github.com/yateshr/KeyboardWriterHelper/releases)
 
 A small, high-performance Windows tray app that fixes spelling mistakes in any program as you type.
 When you press Space after a misspelled word, it is replaced with the most likely

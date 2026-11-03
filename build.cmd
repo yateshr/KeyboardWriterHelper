@@ -47,9 +47,11 @@ set RES=/resource:english-model.bin,english-model.bin
 :resources
 for %%f in (data\*.txt) do call set RES=%%RES%% /resource:%%f,%%~nxf
 
+set ICON=
+if exist assets\icon.ico set ICON=/win32icon:assets\icon.ico
 set OUT=%KWH_OUT%
 if not defined OUT set OUT=KeyboardWriterHelper.exe
-"%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /nologo /target:winexe /optimize+ /win32manifest:app.manifest /out:"%OUT%" %RES% /recurse:src\*.cs "%GEN%"
+"%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /nologo /target:winexe /optimize+ /win32manifest:app.manifest %ICON% /out:"%OUT%" %RES% /recurse:src\*.cs "%GEN%"
 if errorlevel 1 goto failed
 echo Built %OUT%  -  version %SHOWN%
 exit /b 0
