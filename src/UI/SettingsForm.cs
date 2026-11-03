@@ -229,6 +229,8 @@ namespace KeyboardWriterHelper
                 o.ShowCandidatePopup, delegate(bool v) { o.ShowCandidatePopup = v; o.Save(); }));
             flow.Controls.Add(Check("Smart Compose: guess the next word from the words before (Tab accepts it while shown)",
                 o.SmartCompose, delegate(bool v) { o.SmartCompose = v; o.Save(); }));
+            flow.Controls.Add(Check("Check for a new version now and then (you are only told when there is one)",
+                o.CheckForUpdates, delegate(bool v) { o.CheckForUpdates = v; o.Save(); }));
             Label note = Note(
                 "Backspace right after a fix undoes it. Turn on personal learning in the Learning tab to remember your feedback.\r\n\r\n" +
                 "A full stop never triggers a fix by itself (example.com is not a sentence); the next Space does.", 0, 80);

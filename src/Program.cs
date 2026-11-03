@@ -38,6 +38,24 @@ namespace KeyboardWriterHelper
                 Out().WriteLine(TrayApp.AppName + " " + Version);
                 return 0;
             }
+            if (args.Length >= 1 && args[0] == "--update-check")
+            {
+                // Prints whether a newer release exists; with "--install <exe>" also swaps that file for it (a test).
+                TextWriter o = Out();
+                try
+                {
+                    UpdateInfo info = Updater.Find();
+                    o.WriteLine(info == null ? "up to date (" + Updater.Current() + ")" : "update available: " + info.Version);
+                    if (info != null && args.Length == 3 && args[1] == "--install")
+                    {
+                        string error = Updater.Install(info, args[2]);
+                        o.WriteLine(error ?? "installed");
+                        return error == null ? 0 : 1;
+                    }
+                    return 0;
+                }
+                catch (Exception ex) { o.WriteLine("check failed: " + ex.Message); return 1; }
+            }
             if (args.Length >= 2 && args[0] == "--check") return Check(args);
             if (args.Length >= 2 && args[0] == "--simulate") return Simulate(args[1]);
             if (args.Length >= 2 && args[0] == "--cases") return Cases(args);
@@ -54,7 +72,16 @@ namespace KeyboardWriterHelper
             }
 
             bool first;
-            using (Mutex single = new Mutex(true, "KeyboardWriterHelper.SingleInstance", out first))
+            Mutex held = new Mutex(true, "KeyboardWriterHelper.SingleInstance", out first);
+            // Started by an update: the old copy is still closing.
+            for (int wait = 0; !first && wait < 20 && args.Length == 1 && args[0] == "--after-update"; wait++)
+            {
+                held.Dispose();
+                Thread.Sleep(500);
+                held = new Mutex(true, "KeyboardWriterHelper.SingleInstance", out first);
+            }
+            Updater.CleanUp();
+            using (Mutex single = held)
             {
                 if (!first)
                 {
