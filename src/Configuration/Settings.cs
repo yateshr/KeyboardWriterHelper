@@ -89,7 +89,7 @@ namespace KeyboardWriterHelper
         public volatile bool FixOnPunctuation = true, CapitalizeSentences = true, FixTwoCapitals = true,
                              FixPhrases = true, DoubleSpacePeriod, UseContext = true, AcceptVariants = true,
                              RememberTypos, LearnPersonalVocabulary, SmartDashes, SmartArrows, SmartEllipsis,
-                             SkipFullscreenGames = true, ShowCandidatePopup = true, SmartCompose = true;
+                             SkipFullscreenGames = true, ShowCandidatePopup = true, SmartCompose = true, CheckForUpdates = true;
         public volatile Hotkey PauseHotkey = Hotkey.Parse("Ctrl+Alt+K"), NextHotkey = Hotkey.Parse("Ctrl+Alt+N");
         // The English spelling that supplies the suggestions ("" = the first one installed).
         public volatile string MainLanguage = "";
@@ -123,6 +123,7 @@ namespace KeyboardWriterHelper
                     else if (key == "skipFullscreenGames") SkipFullscreenGames = value;
                     else if (key == "showCandidatePopup") ShowCandidatePopup = value;
                     else if (key == "smartCompose") SmartCompose = value;
+                    else if (key == "checkForUpdates") CheckForUpdates = value;
                     else if (key == "mainLanguage") MainLanguage = text;
                     else if (key == "keyboardLayout") KeyboardLayout = text;
                     else if (key == "pauseHotkey") PauseHotkey = Hotkey.Parse(text) ?? PauseHotkey;
@@ -197,6 +198,7 @@ namespace KeyboardWriterHelper
                     "skipFullscreenGames=" + Text(SkipFullscreenGames) +
                     "showCandidatePopup=" + Text(ShowCandidatePopup) +
                     "smartCompose=" + Text(SmartCompose) +
+                    "checkForUpdates=" + Text(CheckForUpdates) +
                     "mainLanguage=" + MainLanguage + "\r\n" +
                     "keyboardLayout=" + KeyboardLayout + "\r\n" +
                     "pauseHotkey=" + PauseHotkey + "\r\n" +

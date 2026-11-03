@@ -1,6 +1,15 @@
 # Changelog
 
-Newest first. Versions 1.1 to 1.10, then 2.1 (see `version.txt`).
+Newest first. Versions 1.1 to 1.10, then 2.1, 2.2... (see `version.txt`).
+
+## 2.1
+
+- **Automatic updates.** Half a minute after start, and then once a day, the app looks at the
+  latest GitHub release. If there is no newer version it says nothing. If there is one, a
+  tray notice appears; click it (or "Update to ..." in the tray menu) and the app downloads
+  the new exe, checks its SHA-256 against the release's `SHA256SUMS.txt`, replaces itself
+  and restarts. A download that does not match is thrown away.
+- Tray menu: "Check for updates". Settings: turn the checks off.
 
 ## 1.10
 

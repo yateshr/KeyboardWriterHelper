@@ -99,16 +99,18 @@ namespace KeyboardWriterHelper
             ToolStripMenuItem settingsItem = new ToolStripMenuItem("Settings and statistics...", null, delegate { ShowSettings(); });
             startupItem = new ToolStripMenuItem("Start with Windows", null, delegate { SetStartup(!IsStartupEnabled()); });
             startupItem.Checked = IsStartupEnabled();
+            updateItem = new ToolStripMenuItem("Check for updates", null, delegate { OnUpdateItem(); });
             ToolStripMenuItem exitItem = new ToolStripMenuItem("Exit", null, delegate { ExitThread(); });
             menu.Items.AddRange(new ToolStripItem[] {
                 title, errorItem, statsItem, new ToolStripSeparator(), enabledItem, pauseItem, appItem, recentItem,
-                new ToolStripSeparator(), settingsItem, startupItem,
+                new ToolStripSeparator(), settingsItem, startupItem, updateItem,
                 new ToolStripSeparator(), exitItem });
             menu.Opening += delegate { RefreshMenu(); };
 
             tray = new NotifyIcon();
             tray.ContextMenuStrip = menu;
             tray.DoubleClick += delegate { Enabled = !Enabled; };
+            tray.BalloonTipClicked += delegate { if (pendingUpdate != null) OfferUpdate(); };
 
             candidatePopup = new CandidatePopup();
 
@@ -410,8 +412,95 @@ namespace KeyboardWriterHelper
             }
         }
 
+        // ---- Updates ----
+
+        ToolStripMenuItem updateItem;
+        UpdateInfo pendingUpdate;
+        bool checkingForUpdate, installingUpdate;
+        // First look half a minute after start, then once a day.
+        DateTime nextUpdateCheck = DateTime.UtcNow.AddSeconds(30);
+
+        // Silent unless there is a new version (or the user asked).
+        void CheckForUpdate(bool asked)
+        {
+            if (checkingForUpdate || installingUpdate) return;
+            checkingForUpdate = true;
+            Thread worker = new Thread(delegate()
+            {
+                UpdateInfo found = null;
+                string failure = null;
+                try { found = Updater.Find(); }
+                catch (Exception ex) { failure = ex.Message; }
+                OnUi(delegate
+                {
+                    checkingForUpdate = false;
+                    if (found != null)
+                    {
+                        pendingUpdate = found;
+                        updateItem.Text = "Update to " + found.Version + "...";
+                        if (asked) OfferUpdate();
+                        else tray.ShowBalloonTip(10000, AppName, "Version " + found.Version + " is available. Click here to update.", ToolTipIcon.Info);
+                    }
+                    else if (asked)
+                    {
+                        MessageBox.Show(failure == null ? "You have the latest version (" + Updater.Current() + ")."
+                            : "Could not check for updates: " + failure, AppName, MessageBoxButtons.OK,
+                            failure == null ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+                    }
+                });
+            });
+            worker.IsBackground = true;
+            worker.Start();
+        }
+
+        void OnUpdateItem()
+        {
+            if (pendingUpdate != null) OfferUpdate();
+            else CheckForUpdate(true);
+        }
+
+        void OfferUpdate()
+        {
+            UpdateInfo info = pendingUpdate;
+            if (info == null || installingUpdate) return;
+            string notes = string.IsNullOrEmpty(info.Notes) ? "" : "\r\n\r\n" + (info.Notes.Length > 700 ? info.Notes.Substring(0, 700) + "..." : info.Notes).Replace("\n", "\r\n");
+            if (MessageBox.Show("Version " + info.Version + " is available (you have " + Updater.Current() + ")." + notes +
+                "\r\n\r\nUpdate now? The app restarts by itself.", AppName, MessageBoxButtons.YesNo, MessageBoxIcon.Information) != DialogResult.Yes)
+                return;
+            installingUpdate = true;
+            Say("Downloading version " + info.Version + "...");
+            string exe = Application.ExecutablePath;
+            Thread worker = new Thread(delegate()
+            {
+                string error = Updater.Install(info, exe);
+                OnUi(delegate
+                {
+                    installingUpdate = false;
+                    if (error != null)
+                    {
+                        MessageBox.Show("The update was not installed: " + error, AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                    try { Updater.Restart(exe); }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show("Updated, but the new version did not start: " + ex.Message + "\r\nStart it from " + exe, AppName);
+                        return;
+                    }
+                    ExitThread();
+                });
+            });
+            worker.IsBackground = true;
+            worker.Start();
+        }
+
         void Housekeeping()
         {
+            if (settings.CheckForUpdates && DateTime.UtcNow >= nextUpdateCheck)
+            {
+                nextUpdateCheck = DateTime.UtcNow.AddHours(24);
+                if (pendingUpdate == null) CheckForUpdate(false);
+            }
             corrector.Watchdog();
             myWords.Sync();
             myFixes.Sync();
