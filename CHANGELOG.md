@@ -2,6 +2,11 @@
 
 Newest first. Versions 1.1 to 1.10, then 2.1 (see `version.txt`).
 
+## 1.10
+
+- The tray icon now uses the new logo (rounded square, "Aa" and a check mark), in green when
+  correcting, grey when paused and amber when the program in front is skipped.
+
 ## 1.9
 
 - **Keyboard hook watchdog.** Windows can silently drop a keyboard hook, after which
