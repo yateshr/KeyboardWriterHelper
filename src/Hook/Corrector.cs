@@ -181,9 +181,46 @@ namespace KeyboardWriterHelper
 
             // Hook callbacks are delivered from inside GetMessage.
             Native.MSG msg;
-            while (Native.GetMessage(out msg, IntPtr.Zero, 0, 0) > 0) { }
+            while (Native.GetMessage(out msg, IntPtr.Zero, 0, 0) > 0)
+            {
+                // Windows removes a keyboard hook without a word if one call ever
+                // took too long, and the typing is then never seen again.
+                if (msg.message == Native.WM_APP)
+                {
+                    IntPtr fresh = Native.SetWindowsHookEx(Native.WH_KEYBOARD_LL, keyProc, Native.GetModuleHandle(null), 0);
+                    if (fresh != IntPtr.Zero)
+                    {
+                        Native.UnhookWindowsHookEx(keyHook);
+                        keyHook = fresh;
+                        counters.HookReinstalls++;
+                    }
+                }
+            }
 
             Native.UnhookWindowsHookEx(keyHook);
+        }
+
+        // Called once a second. If the user has been typing or clicking but not one
+        // key reached the hook for a while, the hook was probably dropped: put it back.
+        int watchKeys, watchSuspect;
+        uint watchInput;
+        int watchReinstalledAt;
+        public void Watchdog()
+        {
+            if (threadId == 0) return;
+            Native.LASTINPUTINFO info = new Native.LASTINPUTINFO();
+            info.cbSize = (uint)Marshal.SizeOf(typeof(Native.LASTINPUTINFO));
+            if (!Native.GetLastInputInfo(ref info)) return;
+            bool input = info.dwTime != watchInput;
+            watchInput = info.dwTime;
+            if (counters.Keys != watchKeys) { watchKeys = counters.Keys; watchSuspect = 0; return; }
+            if (input) watchSuspect++;
+            if (watchSuspect >= 6 && Environment.TickCount - watchReinstalledAt > 20000)
+            {
+                watchSuspect = 0;
+                watchReinstalledAt = Environment.TickCount;
+                Native.PostThreadMessage(threadId, Native.WM_APP, IntPtr.Zero, IntPtr.Zero);
+            }
         }
 
         void RunMouse()

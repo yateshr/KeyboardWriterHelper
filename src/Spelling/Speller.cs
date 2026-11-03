@@ -112,7 +112,7 @@ namespace KeyboardWriterHelper
     // Counts only - never the text that was typed.
     sealed class Counters
     {
-        public int Keys, Words, Corrections, Undone, TooSlow, Errors, SlowestKeyMs;
+        public int Keys, Words, Corrections, Undone, TooSlow, Errors, SlowestKeyMs, HookReinstalls;
         public string LastError;
         // Keys the app ignored, by program and reason ("WINWORD.EXE: full-screen
         // window"). Names of programs and numbers only, never typed text.

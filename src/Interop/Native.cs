@@ -67,6 +67,11 @@ namespace KeyboardWriterHelper
         public static extern uint GetCurrentThreadId();
         [DllImport("user32.dll")]
         public static extern int GetMessage(out MSG msg, IntPtr hWnd, uint min, uint max);
+        public const uint WM_APP = 0x8000;
+        [StructLayout(LayoutKind.Sequential)]
+        public struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
+        [DllImport("user32.dll")]
+        public static extern bool GetLastInputInfo(ref LASTINPUTINFO info);
         [DllImport("user32.dll")]
         public static extern bool PostThreadMessage(uint threadId, uint msg, IntPtr wParam, IntPtr lParam);
         [DllImport("user32.dll")]
