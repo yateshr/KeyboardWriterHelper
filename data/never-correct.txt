@@ -34,3 +34,6 @@ flipkart phonepe gpay tcs
 yo bruh bday wassup fave yeet simp highkey lowkey fomo srry sry
 aint eslint venv mongodb postgres postgresql mysql sqlite redis nginx
 regd recd engg pune iyer tarun
+
+# Chat slang.
+lolz lulz

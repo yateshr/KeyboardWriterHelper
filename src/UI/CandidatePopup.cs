@@ -1,26 +1,19 @@
 using System;
-using System.Collections;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
-using System.Globalization;
-using System.IO;
-using System.Reflection;
+using System.Drawing.Text;
 using System.Runtime.InteropServices;
-using System.Runtime.InteropServices.ComTypes;
-using System.Security.Principal;
-using System.Text;
-using System.Threading;
 using System.Windows.Forms;
-using Microsoft.Win32;
 
 namespace KeyboardWriterHelper
 {
     // ---- Floating Candidate Popup ----
 
+    // The bar in the top right corner of the screen being typed on: the choices
+    // after a correction, or the Tab suggestion. Everything is measured from
+    // `scale`, which is worked out again for the screen it is shown on, so it is
+    // the same size to the eye on a laptop, a 4K display with Windows scaling,
+    // a large screen without scaling, or several screens of different density.
     sealed class CandidatePopup : Form
     {
         readonly System.Windows.Forms.Timer hideTimer = new System.Windows.Forms.Timer();
@@ -29,6 +22,19 @@ namespace KeyboardWriterHelper
         bool isPredictionMode;
         string predictionWord = "";
         string predictionPrefix = "";
+
+        // Text size in pixels at 96 DPI (9.5 pt), and the size of a 1080 p screen.
+        const float BaseFontPixels = 12.67f;
+        const int ReferenceHeight = 1080;
+        // A big screen without Windows scaling still gets a bigger bar, but never
+        // more than this many times the normal size.
+        const double MaxSizeFactor = 2.5;
+
+        double scale = 1.0;
+        Font popupFont;
+
+        [DllImport("user32.dll")] static extern IntPtr MonitorFromPoint(Point pt, uint flags);
+        [DllImport("shcore.dll")] static extern int GetDpiForMonitor(IntPtr monitor, int type, out uint dpiX, out uint dpiY);
 
         protected override bool ShowWithoutActivation { get { return true; } }
 
@@ -50,21 +56,73 @@ namespace KeyboardWriterHelper
             ShowInTaskbar = false;
             TopMost = true;
             DoubleBuffered = true;
+            // The size is set here, once for each time it is shown, and never by
+            // WinForms' own scaling when the window lands on another screen.
+            AutoScaleMode = AutoScaleMode.None;
             BackColor = Color.FromArgb(32, 34, 38);
             ForeColor = Color.White;
-            Font = new Font("Segoe UI", 9.5f, FontStyle.Regular);
-            // Font.Height grows with Windows scaling; the pill grows with it.
-            Size = new Size(320, Math.Max(36, Font.Height + 16));
             AccessibleName = "Word Suggestions";
             AccessibleRole = AccessibleRole.ToolTip;
+            ApplyScale(1.0);
 
             hideTimer.Interval = 2500;
             hideTimer.Tick += delegate { Hide(); hideTimer.Stop(); };
         }
 
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                hideTimer.Dispose();
+                if (popupFont != null) popupFont.Dispose();
+            }
+            base.Dispose(disposing);
+        }
+
+        int S(int value) { return (int)Math.Round(value * scale); }
+
+        void ApplyScale(double newScale)
+        {
+            if (popupFont != null && Math.Abs(newScale - scale) < 0.01) return;
+            scale = newScale;
+            Font old = popupFont;
+            popupFont = new Font("Segoe UI", (float)(BaseFontPixels * scale), FontStyle.Regular, GraphicsUnit.Pixel);
+            Font = popupFont;
+            if (old != null) old.Dispose();
+            Height = Math.Max(S(36), popupFont.Height + S(16));
+        }
+
+        // Windows' scaling for the screen (150 % = 1.5) times how much bigger the
+        // screen is than a 1080 p one in the scaled units it reports.
+        static double ScaleFor(Screen screen)
+        {
+            double dpiScale = 1.0;
+            try
+            {
+                Rectangle b = screen.Bounds;
+                IntPtr monitor = MonitorFromPoint(new Point(b.Left + b.Width / 2, b.Top + b.Height / 2), 2); // nearest
+                uint dx, dy;
+                if (monitor != IntPtr.Zero && GetDpiForMonitor(monitor, 0, out dx, out dy) == 0 && dx > 0) dpiScale = dx / 96.0;
+            }
+            catch (DllNotFoundException) { }
+            catch (EntryPointNotFoundException) { }
+            // Height in the units the scaling leaves: a 4K screen at 200 % is 1080.
+            double logicalHeight = screen.WorkingArea.Height / dpiScale;
+            double sizeFactor = Math.Max(1.0, Math.Min(MaxSizeFactor, logicalHeight / ReferenceHeight));
+            return dpiScale * sizeFactor;
+        }
+
+        Screen TargetScreen(IntPtr foreground)
+        {
+            try { return foreground != IntPtr.Zero ? Screen.FromHandle(foreground) : Screen.FromPoint(Cursor.Position); }
+            catch (Exception) { return Screen.PrimaryScreen; }
+        }
+
         public void ShowCandidates(string fix, string[] choices, IntPtr foreground)
         {
             if (choices == null || choices.Length == 0) { Hide(); return; }
+            Screen screen = TargetScreen(foreground);
+            ApplyScale(ScaleFor(screen));
             isPredictionMode = false;
             currentFix = fix;
             currentChoices = choices;
@@ -72,25 +130,22 @@ namespace KeyboardWriterHelper
             hideTimer.Stop();
             hideTimer.Start();
 
+            int width = S(24);
             using (Graphics g = CreateGraphics())
             {
-                int totalWidth = 24;
                 for (int i = 0; i < choices.Length; i++)
-                {
-                    string text = (i + 1) + ". " + choices[i];
-                    SizeF sz = g.MeasureString(text, Font);
-                    totalWidth += (int)sz.Width + 16;
-                }
-                totalWidth += 40;
-                Width = Math.Max(240, Math.Min(totalWidth, 600));
+                    width += (int)g.MeasureString((i + 1) + ". " + choices[i], popupFont).Width + S(16);
             }
-            PositionPopup(foreground);
-            Invalidate();
-            if (!Visible) Show();
+            width += S(40);
+            int maxWidth = Math.Min(S(600), (int)(screen.WorkingArea.Width * 0.6));
+            Present(screen, Math.Max(S(240), Math.Min(width, maxWidth)));
         }
+
         public void ShowPrediction(string prediction, string prefix, IntPtr foreground)
         {
             if (string.IsNullOrEmpty(prediction)) { Dismiss(); return; }
+            Screen screen = TargetScreen(foreground);
+            ApplyScale(ScaleFor(screen));
             isPredictionMode = true;
             predictionWord = prediction;
             predictionPrefix = prefix ?? "";
@@ -98,62 +153,26 @@ namespace KeyboardWriterHelper
             hideTimer.Stop();
             hideTimer.Start();
 
+            int width;
             using (Graphics g = CreateGraphics())
-            {
-                SizeF szTab = g.MeasureString("⇥ Tab", Font);
-                SizeF szWord = g.MeasureString(prediction, Font);
-                Width = Math.Max(180, (int)(szTab.Width + szWord.Width + 56));
-            }
-
-            PositionPopup(foreground);
-            Invalidate();
-            if (!Visible) Show();
+                width = (int)(g.MeasureString("⇥ Tab", popupFont).Width + g.MeasureString(prediction, popupFont).Width + g.MeasureString("Esc", popupFont).Width) + S(64);
+            int maxWidth = Math.Min(S(600), (int)(screen.WorkingArea.Width * 0.6));
+            Present(screen, Math.Min(Math.Max(S(180), width), maxWidth));
         }
 
-        void PositionPopup(IntPtr foreground)
+        // Always the top right corner of the screen being typed on, so it is in the
+        // same place every time and never covers the text. The size is set after
+        // the window is shown too: moving to a screen with other scaling can make
+        // Windows resize it.
+        void Present(Screen screen, int width)
         {
-            Point target = Point.Empty;
-
-            bool foundCaret = false;
-            if (foreground != IntPtr.Zero)
-            {
-                uint tid = Native.GetWindowThreadProcessId(foreground, IntPtr.Zero);
-                Native.GUITHREADINFO gui = new Native.GUITHREADINFO();
-                gui.cbSize = Marshal.SizeOf(typeof(Native.GUITHREADINFO));
-                if (Native.GetGUIThreadInfo(tid, ref gui) && gui.hwndCaret != IntPtr.Zero && gui.rcCaret.Right > gui.rcCaret.Left)
-                {
-                    Native.POINT pt = new Native.POINT { X = gui.rcCaret.Left, Y = gui.rcCaret.Bottom + 4 };
-                    if (Native.ClientToScreen(gui.hwndCaret, ref pt))
-                    {
-                        target = new Point(pt.X, pt.Y);
-                        foundCaret = true;
-                    }
-                }
-            }
-
-            Screen scr = Screen.FromPoint(foundCaret ? target : (foreground != IntPtr.Zero ? Screen.FromHandle(foreground).WorkingArea.Location : Cursor.Position));
-            if (foundCaret)
-            {
-                int left = Math.Max(scr.WorkingArea.Left + 5, Math.Min(target.X, scr.WorkingArea.Right - Width - 5));
-                int top = target.Y;
-                if (top + Height > scr.WorkingArea.Bottom)
-                    top = Math.Max(scr.WorkingArea.Top + 5, target.Y - Height - 24);
-                Location = new Point(left, top);
-            }
-            else
-            {
-                Native.RECT rect;
-                if (foreground != IntPtr.Zero && Native.GetWindowRect(foreground, out rect) && rect.Right > rect.Left && rect.Bottom > rect.Top)
-                {
-                    int left = Math.Max(scr.WorkingArea.Left + 10, Math.Min(rect.Right - Width - 20, scr.WorkingArea.Right - Width - 10));
-                    int top = Math.Max(scr.WorkingArea.Top + 10, Math.Min(rect.Bottom - Height - 20, scr.WorkingArea.Bottom - Height - 10));
-                    Location = new Point(left, top);
-                }
-                else
-                {
-                    Location = new Point(scr.WorkingArea.Right - Width - 20, scr.WorkingArea.Bottom - Height - 20);
-                }
-            }
+            Rectangle area = screen.WorkingArea;
+            Size size = new Size(width, Math.Max(S(36), popupFont.Height + S(16)));
+            Rectangle bounds = new Rectangle(new Point(area.Right - size.Width - S(20), area.Top + S(20)), size);
+            Bounds = bounds;
+            Invalidate();
+            if (!Visible) Show();
+            if (Bounds != bounds) Bounds = bounds;
         }
 
         public void Dismiss()
@@ -167,8 +186,9 @@ namespace KeyboardWriterHelper
         {
             Graphics g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
 
-            using (GraphicsPath path = RoundedRect(new Rectangle(0, 0, Width - 1, Height - 1), 6))
+            using (GraphicsPath path = RoundedRect(new Rectangle(0, 0, Width - 1, Height - 1), S(6)))
             {
                 using (SolidBrush bg = new SolidBrush(Color.FromArgb(28, 30, 34)))
                     g.FillPath(bg, path);
@@ -176,61 +196,63 @@ namespace KeyboardWriterHelper
                     g.DrawPath(border, path);
             }
 
-            int x = 12;
-            int y = (Height - Font.Height) / 2;
+            int x = S(12);
+            int y = (Height - popupFont.Height) / 2;
+            int inset = S(4), radius = S(4);
             if (isPredictionMode)
             {
                 string tabBadge = "⇥ Tab";
-                SizeF tabSz = g.MeasureString(tabBadge, Font);
-                Rectangle pill = new Rectangle(x - 4, 4, (int)tabSz.Width + 8, Height - 8);
-                using (GraphicsPath p = RoundedRect(pill, 4))
+                SizeF tabSz = g.MeasureString(tabBadge, popupFont);
+                Rectangle pill = new Rectangle(x - inset, inset, (int)tabSz.Width + 2 * inset, Height - 2 * inset);
+                using (GraphicsPath p = RoundedRect(pill, radius))
                 using (SolidBrush b = new SolidBrush(Color.FromArgb(37, 99, 235)))
                     g.FillPath(b, p);
                 using (SolidBrush txt = new SolidBrush(Color.White))
-                    g.DrawString(tabBadge, Font, txt, x, y);
+                    g.DrawString(tabBadge, popupFont, txt, x, y);
 
-                x += (int)tabSz.Width + 14;
+                x += (int)tabSz.Width + S(14);
                 using (SolidBrush wordBrush = new SolidBrush(Color.FromArgb(240, 243, 246)))
-                    g.DrawString(predictionWord, Font, wordBrush, x, y);
+                    g.DrawString(predictionWord, popupFont, wordBrush, x, y);
 
-                string esc = "Esc";
+                SizeF escSz = g.MeasureString("Esc", popupFont);
                 using (SolidBrush hintBrush = new SolidBrush(Color.FromArgb(140, 144, 152)))
-                    g.DrawString(esc, Font, hintBrush, Width - 32, y);
+                    g.DrawString("Esc", popupFont, hintBrush, Width - escSz.Width - S(8), y);
                 return;
             }
 
-            for (int i = 0; i < currentChoices.Length && x < Width - 40; i++)
+            SizeF hintSz = g.MeasureString("⌫", popupFont);
+            int hintX = Width - (int)hintSz.Width - S(8);
+            for (int i = 0; i < currentChoices.Length && x < hintX - S(8); i++)
             {
                 string word = currentChoices[i];
                 bool active = string.Equals(word, currentFix, StringComparison.OrdinalIgnoreCase);
                 string text = (i + 1) + ". " + word;
-                SizeF sz = g.MeasureString(text, Font);
+                SizeF sz = g.MeasureString(text, popupFont);
 
                 if (active)
                 {
-                    Rectangle pill = new Rectangle(x - 4, 4, (int)sz.Width + 8, Height - 8);
-                    using (GraphicsPath p = RoundedRect(pill, 4))
+                    Rectangle pill = new Rectangle(x - inset, inset, (int)sz.Width + 2 * inset, Height - 2 * inset);
+                    using (GraphicsPath p = RoundedRect(pill, radius))
                     using (SolidBrush b = new SolidBrush(Color.FromArgb(22, 163, 74)))
                         g.FillPath(b, p);
                     using (SolidBrush txt = new SolidBrush(Color.White))
-                        g.DrawString(text, Font, txt, x, y);
+                        g.DrawString(text, popupFont, txt, x, y);
                 }
                 else
                 {
                     using (SolidBrush txt = new SolidBrush(Color.FromArgb(180, 184, 192)))
-                        g.DrawString(text, Font, txt, x, y);
+                        g.DrawString(text, popupFont, txt, x, y);
                 }
-                x += (int)sz.Width + 14;
+                x += (int)sz.Width + S(14);
             }
 
-            string hint = "⌫";
             using (SolidBrush hintBrush = new SolidBrush(Color.FromArgb(180, 184, 192)))
-                g.DrawString(hint, Font, hintBrush, Width - 22, y);
+                g.DrawString("⌫", popupFont, hintBrush, hintX, y);
         }
 
         static GraphicsPath RoundedRect(Rectangle bounds, int radius)
         {
-            int d = radius * 2;
+            int d = Math.Max(2, radius * 2);
             GraphicsPath path = new GraphicsPath();
             path.AddArc(bounds.X, bounds.Y, d, d, 180, 90);
             path.AddArc(bounds.Right - d, bounds.Y, d, d, 270, 90);

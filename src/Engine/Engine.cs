@@ -44,8 +44,18 @@ namespace KeyboardWriterHelper
         const int MaxContextWords = 6;
 
         // The built-in lists; each file in data\ says at its top what it is for.
-        static readonly Dictionary<string, string> CommonFixes = Data.Pairs("fixes.txt");
+        static readonly Dictionary<string, string> CommonFixes = LoadFixes();
         static readonly Dictionary<string, string> PhraseFixes = Data.Pairs("phrase-fixes.txt");
+
+        // fixes.txt is written by hand and wins; fixes-open-source.txt is generated
+        // from open misspelling lists (see THIRD_PARTY_NOTICES.md).
+        static Dictionary<string, string> LoadFixes()
+        {
+            Dictionary<string, string> fixes = Data.Pairs("fixes.txt");
+            foreach (KeyValuePair<string, string> fix in Data.Pairs("fixes-open-source.txt"))
+                if (!fixes.ContainsKey(fix.Key)) fixes.Add(fix.Key, fix.Value);
+            return fixes;
+        }
         static readonly HashSet<string> NeverCorrect = Data.Words("never-correct.txt");
         static readonly HashSet<string> OtherLanguage = Data.Words("other-language.txt");
         static readonly HashSet<string> Abbreviations = Data.Words("abbreviations.txt");
@@ -113,7 +123,9 @@ namespace KeyboardWriterHelper
             { "require", "requires" }, { "support", "supports" }, { "include", "includes" },
             { "contain", "contains" }, { "belong", "belongs" }, { "open", "opens" }, { "close", "closes" },
             { "play", "plays" }, { "read", "reads" }, { "write", "writes" }, { "run", "runs" },
-            { "start", "starts" }, { "stop", "stops" }, { "wait", "waits" }, { "finish", "finishes" }
+            { "start", "starts" }, { "stop", "stops" }, { "wait", "waits" }, { "finish", "finishes" },
+            { "behave", "behaves" }, { "happen", "happens" }, { "depend", "depends" }, { "exist", "exists" },
+            { "remain", "remains" }, { "appear", "appears" }, { "occur", "occurs" }
         };
         static readonly Dictionary<string, string> BaseVerbsByThirdPerson = Reverse(ThirdPersonVerbs);
         static readonly HashSet<string> AuxiliaryModifiers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)

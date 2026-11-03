@@ -72,6 +72,26 @@ its been=it's been
 its the=it's the
 its ok=it's ok
 its okay=it's okay
+its going=it's going
+its raining=it's raining
+its so=it's so
+its just=it's just
+its too=it's too
+its really=it's really
+its already=it's already
+its what=it's what
+its how=it's how
+its why=it's why
+its when=it's when
+its because=it's because
+its my=it's my
+its your=it's your
+its his=it's his
+its our=it's our
+its all=it's all
+its sunny=it's sunny
+its gonna=it's gonna
+its time to=it's time to
 
 # you're / your
 your a=you're a
@@ -398,3 +418,12 @@ are suppose to=are supposed to
 were suppose to=were supposed to
 am suppose to=am supposed to
 not suppose to=not supposed to
+
+# Windows, the product (not the windows of a house).
+windows xp=Windows XP
+windows defender=Windows Defender
+windows update=Windows Update
+windows server=Windows Server
+windows explorer=Windows Explorer
+windows terminal=Windows Terminal
+microsoft windows=Microsoft Windows

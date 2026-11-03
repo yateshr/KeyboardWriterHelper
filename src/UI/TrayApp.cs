@@ -412,6 +412,7 @@ namespace KeyboardWriterHelper
 
         void Housekeeping()
         {
+            corrector.Watchdog();
             myWords.Sync();
             myFixes.Sync();
             excludedApps.Sync();
@@ -507,8 +508,12 @@ namespace KeyboardWriterHelper
                 "corrections undone: " + counters.Undone + "\r\n" +
                 "lookups too slow (word left alone): " + counters.TooSlow + "\r\n" +
                 "slowest key handling (ms): " + counters.SlowestKeyMs + "\r\n" +
+                "keyboard hook put back (Windows had dropped it): " + counters.HookReinstalls + "\r\n" +
                 "errors: " + counters.Errors + "\r\n" +
                 "last error: " + (counters.LastError ?? "none") + "\r\n";
+            string[] skipped = counters.SkippedLines();
+            if (skipped.Length > 0)
+                body += "keys ignored (program: reason = count):\r\n  " + string.Join("\r\n  ", skipped) + "\r\n";
             if (body == lastStats) return;
             try
             {

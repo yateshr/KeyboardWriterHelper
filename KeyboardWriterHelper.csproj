@@ -11,6 +11,7 @@
     <Version>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\version.txt').Trim())</Version>
     <StartupObject>KeyboardWriterHelper.Program</StartupObject>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>assets/icon.ico</ApplicationIcon>
     <NoWarn>$(NoWarn);WFO0003</NoWarn>
   </PropertyGroup>
 

@@ -67,6 +67,11 @@ namespace KeyboardWriterHelper
         public static extern uint GetCurrentThreadId();
         [DllImport("user32.dll")]
         public static extern int GetMessage(out MSG msg, IntPtr hWnd, uint min, uint max);
+        public const uint WM_APP = 0x8000;
+        [StructLayout(LayoutKind.Sequential)]
+        public struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
+        [DllImport("user32.dll")]
+        public static extern bool GetLastInputInfo(ref LASTINPUTINFO info);
         [DllImport("user32.dll")]
         public static extern bool PostThreadMessage(uint threadId, uint msg, IntPtr wParam, IntPtr lParam);
         [DllImport("user32.dll")]
@@ -263,6 +268,13 @@ namespace KeyboardWriterHelper
             return rows;
         }
 
+        static readonly HashSet<string> WritingPrograms = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "WINWORD.EXE", "EXCEL.EXE", "POWERPNT.EXE", "OUTLOOK.EXE", "ONENOTE.EXE", "notepad.exe",
+            "chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "opera.exe", "vivaldi.exe",
+            "Code.exe", "slack.exe", "Teams.exe", "ms-teams.exe", "Obsidian.exe", "Notion.exe", "soffice.bin", "WordPad.exe"
+        };
+
         public static bool IsForegroundFullScreen(IntPtr fg)
         {
             if (fg == IntPtr.Zero || fg == GetDesktopWindow() || fg == GetShellWindow()) return false;
@@ -279,6 +291,9 @@ namespace KeyboardWriterHelper
                 {
                     string name = ProcessNameOf(fg);
                     if (string.Equals(name, "explorer.exe", StringComparison.OrdinalIgnoreCase)) return false;
+                    // Word's Focus mode and a browser in F11 have no title bar either,
+                    // but they are places to write, not games.
+                    if (name != null && WritingPrograms.Contains(name)) return false;
                     return true;
                 }
             }

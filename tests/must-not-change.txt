@@ -67,7 +67,7 @@
 "I gave him a piece of my mind. " => "I gave him a piece of my mind. "
 
 # Names the dictionary does not know
-"Hi yatesh how are you " => "Hi yatesh how are you "
+"Hi keshavan how are you " => "Hi keshavan how are you "
 
 # ---- Phase 3: noun agreement and auxiliary grammar safeguards ----
 # Agreement must follow the subject rather than the closest plural noun.

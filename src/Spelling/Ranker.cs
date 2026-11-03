@@ -64,7 +64,7 @@ namespace KeyboardWriterHelper
         // Score penalties for kinds of candidate that are rarely what was meant.
         const double SplitPenalty = 2.0, ProperNounPenalty = 2.0;
         // Log10 count assumed for words missing from the frequency list.
-        const float UnknownLog = 1.0f;
+        const float UnknownLog = 0.0f;
         // A regional spelling is at most this many factors of ten rarer than its twin.
         const double VariantFrequencyGap = 1.3;
         // A word missing from the frequency list may only win with a cheaper edit than this.
