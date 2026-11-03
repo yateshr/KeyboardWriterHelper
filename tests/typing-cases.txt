@@ -366,6 +366,7 @@
 "It dehaves the same " => "It behaves the same "
 "Whats different. " => "What's different. "
 "lolz that is funny " => "lolz that is funny "
+"replaces itself and resrat. " => "replaces itself and restart. "
 
 # ---- broader built-in fixes ----
 "whats up " => "what's up "

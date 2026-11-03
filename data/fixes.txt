@@ -587,3 +587,6 @@ powerfull=powerful
 peacefull=peaceful
 meaningfull=meaningful
 sucessfuly=successfully
+resrat=restart
+resart=restart
+restrat=restart
