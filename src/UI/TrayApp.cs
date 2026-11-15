@@ -35,7 +35,7 @@ namespace KeyboardWriterHelper
         readonly Icon iconOn, iconOff, iconSkipped;
         readonly Counters counters = new Counters();
         readonly Settings settings;
-        readonly ListFile myWords, myFixes, excludedApps;
+        readonly ListFile myWords, myFixes, excludedApps, carefulApps;
         readonly PersonalLearning learning;
         readonly TypoLog typos;
         readonly SpellService spelling;
@@ -73,6 +73,7 @@ namespace KeyboardWriterHelper
             myWords = ListFile.MyWords(folder);
             myFixes = ListFile.MyFixes(folder);
             excludedApps = ListFile.ExcludedApps(folder);
+            carefulApps = ListFile.CarefulApps(folder);
             learning = new PersonalLearning(Path.Combine(folder, "personal-learning.txt"), settings.LearnPersonalVocabulary);
             typos = new TypoLog(Path.Combine(folder, "typo-counts.txt"), settings.RememberTypos);
             LoadLifetime();
@@ -123,13 +124,13 @@ namespace KeyboardWriterHelper
             candidatePopup = new CandidatePopup();
 
             IntPtr forceHandle = ui.Handle;
-            corrector = new Corrector(spelling, myWords, myFixes, excludedApps, counters, settings, IntPtr.Zero, learning);
+            corrector = new Corrector(spelling, myWords, myFixes, excludedApps, counters, settings, IntPtr.Zero, learning, carefulApps);
             corrector.Corrected += OnCorrected;
             corrector.Undone += delegate(string typed, string fix) { typos.Count(typed, fix, -1); };
             corrector.Changed += OnChanged;
             corrector.CandidateOffered += delegate(string fix, string[] choices)
             {
-                if (settings.ShowCandidatePopup) OnUi(delegate { candidatePopup.Corner = settings.PopupCorner; candidatePopup.ShowCandidates(fix, choices, Native.GetForegroundWindow()); });
+                if (settings.ShowCandidatePopup && !carefulApps.Contains(corrector.LastApp)) OnUi(delegate { candidatePopup.Corner = settings.PopupCorner; candidatePopup.ShowCandidates(fix, choices, Native.GetForegroundWindow()); });
             };
             corrector.CandidateDismissed += delegate { OnUi(candidatePopup.Dismiss); };
             corrector.PredictionOffered += delegate(string pred, string pfx)
@@ -189,6 +190,7 @@ namespace KeyboardWriterHelper
                 if (myWords != null) myWords.Sync();
                 if (myFixes != null) myFixes.Sync();
                 if (excludedApps != null) excludedApps.Sync();
+                if (carefulApps != null) carefulApps.Sync();
                 if (learning != null) learning.Save();
                 if (settings != null) settings.Save();
                 if (settings != null && settings.RememberTypos && typos != null) typos.Save();
@@ -221,6 +223,7 @@ namespace KeyboardWriterHelper
         public ListFile MyWords { get { return myWords; } }
         public ListFile MyFixes { get { return myFixes; } }
         public ListFile ExcludedApps { get { return excludedApps; } }
+        public ListFile CarefulApps { get { return carefulApps; } }
         public PersonalLearning Learning { get { return learning; } }
         public string CurrentApp { get { return currentApp; } }
         public string DataFolder { get { return folder; } }
@@ -461,6 +464,7 @@ namespace KeyboardWriterHelper
             if (nowSkipped) excludedApps.Add(app);
             else excludedApps.Remove(app);
             excludedApps.Sync();
+            carefulApps.Sync();
             ShowState();
             Say(nowSkipped ? "Auto-correct is OFF in " + app + "." : "Auto-correct is ON in " + app + ".");
         }
@@ -645,7 +649,7 @@ namespace KeyboardWriterHelper
                 " phrases=" + settings.FixPhrases + " context=" + settings.UseContext + " skipFullscreen=" + settings.SkipFullscreenGames +
                 " popup=" + settings.ShowCandidatePopup + " corner=" + settings.PopupCorner + " compose=" + settings.SmartCompose +
                 " updates=" + settings.CheckForUpdates + " layout=" + settings.KeyboardLayout + " language=" + settings.MainLanguage);
-            s.AppendLine("Lists: " + myWords.All().Length + " words, " + myFixes.All().Length + " fixes, " + excludedApps.All().Length + " programs");
+            s.AppendLine("Lists: " + myWords.All().Length + " words, " + myFixes.All().Length + " fixes, " + excludedApps.All().Length + " never-correct programs, " + carefulApps.All().Length + " careful programs");
             return s.ToString();
         }
 

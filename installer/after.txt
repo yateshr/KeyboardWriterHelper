@@ -15,6 +15,7 @@ THE FEW THINGS TO KNOW
   - Ctrl+Alt+K pauses and resumes. Ctrl+Alt+N swaps in the next-best word right after a fix.
   - The suggestion bar in the bottom-left corner of the screen shows the other possible words.
   - Open Settings from the tray menu to choose what gets fixed, to add your own words and shortcuts, and to see the statistics.
+  - If a word is not corrected and you wonder why, Settings > Diagnostics shows whether the app is seeing your keys.
 
 
 UPDATES AND UNINSTALL

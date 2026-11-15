@@ -386,6 +386,14 @@ namespace KeyboardWriterHelper
                 "# The left side is one to four words (\"could of been=could have been\").", new string[0], true);
         }
 
+        // Programs where only clear spelling mistakes are fixed (Settings > Programs > Careful).
+        public static ListFile CarefulApps(string folder)
+        {
+            return new ListFile(Path.Combine(folder, "careful-apps.txt"),
+                "# One program per line. In these only clear spelling mistakes are fixed, when Space is pressed:\r\n" +
+                "# no grammar or phrase changes, no capital letters, no symbols, no suggestions.", new string[0], false);
+        }
+
         // Starts as data\excluded-apps.txt; from then on the list is the user's.
         public static ListFile ExcludedApps(string folder)
         {

@@ -29,8 +29,8 @@ namespace KeyboardWriterHelper
         const string Home = "https://github.com/yateshr/KeyboardWriterHelper";
 
         readonly TrayApp app;
-        readonly ListFrame wordsFrame, fixesFrame, appsFrame, typosFrame, learningFrame;
-        readonly ListBox wordsList, fixesList, appsList, typosList, learningList;
+        readonly ListFrame wordsFrame, fixesFrame, appsFrame, carefulFrame, typosFrame, learningFrame;
+        readonly ListBox wordsList, fixesList, appsList, carefulList, typosList, learningList;
         readonly TextBlock learningStatus;
         readonly Btn frequentTypos, recentTypos;
         readonly TileRow sessionTiles, allTimeTiles, healthTiles;
@@ -45,7 +45,7 @@ namespace KeyboardWriterHelper
         readonly List<Control> pages = new List<Control>();
         readonly List<string[]> titles = new List<string[]>();
         readonly System.Windows.Forms.Timer refresh = new System.Windows.Forms.Timer();
-        string[] shownWords = new string[0], shownFixes = new string[0], shownApps = new string[0], shownTypos = new string[0];
+        string[] shownWords = new string[0], shownFixes = new string[0], shownApps = new string[0], shownTypos = new string[0], shownCareful = new string[0];
         string[] shownLearning = new string[0];
         PersonalLearningEntry[] learningItems = new PersonalLearningEntry[0];
         // { typed, fix } behind each line of the typos list.
@@ -82,14 +82,16 @@ namespace KeyboardWriterHelper
             wordsFrame = new ListFrame("No words yet. Words you add here are never changed.");
             fixesFrame = new ListFrame("No fixes yet. Add one as typo=correction.");
             appsFrame = new ListFrame("No programs listed.");
+            carefulFrame = new ListFrame("No careful programs. Add one to fix only clear spelling mistakes in it.");
             typosFrame = new ListFrame("Nothing corrected yet. Fixes made while you type show up here.");
             learningFrame = new ListFrame("Nothing learned yet.");
             wordsList = wordsFrame.List;
             fixesList = fixesFrame.List;
             appsList = appsFrame.List;
+            carefulList = carefulFrame.List;
             typosList = typosFrame.List;
             learningList = learningFrame.List;
-            wordsList.SelectionMode = fixesList.SelectionMode = appsList.SelectionMode = learningList.SelectionMode = SelectionMode.MultiExtended;
+            wordsList.SelectionMode = fixesList.SelectionMode = appsList.SelectionMode = carefulList.SelectionMode = learningList.SelectionMode = SelectionMode.MultiExtended;
             learningList.HorizontalScrollbar = true;
             learningStatus = new TextBlock("", Face.Caption, null);
             frequentTypos = new Btn("Most frequent", ButtonKind.Tab);
@@ -110,8 +112,7 @@ namespace KeyboardWriterHelper
                 ListPage(wordsFrame, "Type a word and press Enter", "Add word", AddWord, RemoveWord, null));
             AddPage("My fixes", "", "My fixes", "Your own shortcuts and snippets: typo=correction. Supports {date}, {time}, {datetime} and {clip}.",
                 ListPage(fixesFrame, "brb=be right back", "Add fix", AddFix, RemoveFix, null));
-            AddPage("Programs", "", "Programs", "Nothing typed in these programs is corrected. The tray icon turns amber while one is in front.",
-                ListPage(appsFrame, "notepad.exe", "Add program", AddProgram, RemoveProgram, "Add the program in front"));
+            AddPage("Programs", "", "Programs", "Choose programs where it stays out of the way, or is extra careful.", ProgramsPage());
             AddPage("Typos", "", "Typos", "The fixes the app made. Mark one as always or never.", TyposPage());
             AddPage("Learning", "", "Learning", "The app can learn from how you undo and choose corrections.", LearningPage());
             AddPage("Statistics", "", "Statistics", "Numbers only. Nothing you type is ever recorded here.", StatsPage());
@@ -504,6 +505,91 @@ namespace KeyboardWriterHelper
             return page;
         }
 
+        // Two lists on one page: programs where nothing is corrected, and "careful" programs
+        // where only clear spelling mistakes are fixed (no grammar, capitals, symbols or guesses).
+        Control ProgramsPage()
+        {
+            ToolPage page = new ToolPage();
+            Btn never = new Btn("Never correct", ButtonKind.Tab);
+            Btn careful = new Btn("Careful", ButtonKind.Tab);
+            never.Selected = true;
+            TextBlock info = new TextBlock("Nothing typed in these programs is corrected. The tray icon turns amber while one is in front.", Face.Caption, null);
+            ButtonSlot tabs = new ButtonSlot(never, careful);
+            Field input = new Field(false);
+            input.Placeholder = "notepad.exe";
+            input.Input.AccessibleName = "Program name";
+            Btn add = new Btn("Add program", ButtonKind.Primary);
+            Btn now = new Btn("Add the program in front", ButtonKind.Secondary);
+            Btn remove = new Btn("Remove selected", ButtonKind.Secondary);
+
+            Func<bool> isCareful = delegate { return careful.Selected; };
+            Func<ListFile> file = delegate { return isCareful() ? app.CarefulApps : app.ExcludedApps; };
+            Func<ListFrame> frame = delegate { return isCareful() ? carefulFrame : appsFrame; };
+            Action<string> addName = delegate(string text)
+            {
+                if (!text.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) text += ".exe";
+                file().Add(text);
+                file().Sync();
+                Reload();
+            };
+            Action doAdd = delegate
+            {
+                string text = input.Input.Text.Trim();
+                if (text.Length == 0) return;
+                addName(text);
+                input.Input.Text = "";
+            };
+            add.Click += delegate { doAdd(); };
+            input.Input.KeyDown += delegate(object s, KeyEventArgs e)
+            {
+                if (e.KeyCode != Keys.Enter) return;
+                e.SuppressKeyPress = true;
+                doAdd();
+            };
+            now.Click += delegate { if (app.CurrentApp.Length > 0) addName(app.CurrentApp); };
+            remove.Click += delegate
+            {
+                foreach (object item in new ArrayList(frame().List.SelectedItems)) file().Remove((string)item);
+                file().Sync();
+                Reload();
+            };
+            Action<bool> choose = delegate(bool carefulList2)
+            {
+                never.Selected = !carefulList2;
+                careful.Selected = carefulList2;
+                never.Invalidate();
+                careful.Invalidate();
+                appsFrame.Visible = !carefulList2;
+                carefulFrame.Visible = carefulList2;
+                page.Fill = frame();
+                info.Value = carefulList2
+                    ? "In these programs only clear spelling mistakes are fixed, when you press Space: no grammar or phrase changes, no capital letters, no symbols, no suggestion bar. Good for chat, code or email programs."
+                    : "Nothing typed in these programs is corrected. The tray icon turns amber while one is in front.";
+                page.PerformLayout();
+            };
+            never.Click += delegate { choose(false); };
+            careful.Click += delegate { choose(true); };
+
+            carefulFrame.Visible = false;
+            page.Header.Add(tabs);
+            page.Header.Add(info);
+            page.TopStretch = input;
+            page.TopEnd.Add(now);
+            page.TopEnd.Add(add);
+            page.Fill = appsFrame;
+            page.Alternates.Add(carefulFrame);
+            page.BottomEnd.Add(remove);
+            page.Controls.Add(appsFrame);
+            page.Controls.Add(carefulFrame);
+            page.Controls.Add(tabs);
+            page.Controls.Add(info);
+            page.Controls.Add(input);
+            page.Controls.Add(now);
+            page.Controls.Add(add);
+            page.Controls.Add(remove);
+            return page;
+        }
+
         Control TyposPage()
         {
             ToolPage page = new ToolPage();
@@ -642,6 +728,8 @@ namespace KeyboardWriterHelper
                 foreach (string f in app.MyFixes.All()) text.AppendLine(f);
                 text.AppendLine("[programs]");
                 foreach (string p in app.ExcludedApps.All()) text.AppendLine(p);
+                text.AppendLine("[careful]");
+                foreach (string p in app.CarefulApps.All()) text.AppendLine(p);
                 try
                 {
                     File.WriteAllText(dialog.FileName, text.ToString(), new UTF8Encoding(false));
@@ -676,6 +764,11 @@ namespace KeyboardWriterHelper
                         string typed = eq > 0 ? line.Substring(0, eq).Trim() : "", fix = eq > 0 ? line.Substring(eq + 1).Trim() : "";
                         if (IsTypable(typed) && fix.Length > 0) { app.AlwaysFix(typed, fix); fixes++; } else skipped++;
                     }
+                    else if (section == "careful")
+                    {
+                        app.CarefulApps.Add(line.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? line : line + ".exe");
+                        programs++;
+                    }
                     else if (section == "programs")
                     {
                         app.ExcludedApps.Add(line.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? line : line + ".exe");
@@ -683,7 +776,7 @@ namespace KeyboardWriterHelper
                     }
                     else skipped++;
                 }
-                app.MyWords.Sync(); app.MyFixes.Sync(); app.ExcludedApps.Sync();
+                app.MyWords.Sync(); app.MyFixes.Sync(); app.ExcludedApps.Sync(); app.CarefulApps.Sync();
                 Reload();
                 Dialog.Tell(this, "Loaded", words + " words, " + fixes + " fixes and " + programs + " programs were added." +
                     (skipped > 0 ? "\r\n" + skipped + " lines could not be used and were skipped." : ""));
@@ -802,6 +895,7 @@ namespace KeyboardWriterHelper
         {
             Fill(wordsFrame, ref shownWords, app.MyWords.All());
             Fill(appsFrame, ref shownApps, app.ExcludedApps.All());
+            Fill(carefulFrame, ref shownCareful, app.CarefulApps.All());
             Fill(fixesFrame, ref shownFixes, app.MyFixes.All());
 
             string[] numbers = app.StatsNumbers();
@@ -975,6 +1069,8 @@ namespace KeyboardWriterHelper
         sealed class ToolPage : Panel
         {
             public Control Fill, TopStretch;
+            // Other lists that take the same place when they are switched in.
+            public readonly List<Control> Alternates = new List<Control>();
             public readonly List<Control> TopStart = new List<Control>(), TopEnd = new List<Control>();
             public readonly List<Control> BottomStart = new List<Control>(), BottomEnd = new List<Control>();
             // Full-width items (cards, paragraphs) above and below.
@@ -1038,6 +1134,7 @@ namespace KeyboardWriterHelper
                 int bottomH = bottom ? P(36) + gap : 0;
                 int fillH = Math.Max(P(80), Height - y - bottomH - footerH);
                 Fill.SetBounds(0, y, w, fillH);
+                foreach (Control other in Alternates) other.SetBounds(0, y, w, fillH);
                 y += fillH + gap;
                 if (bottom)
                 {

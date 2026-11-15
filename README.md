@@ -2,7 +2,9 @@
 
 # Keyboard Writer Helper
 
-[Changelog](CHANGELOG.md) · [Third-party credits](THIRD_PARTY_NOTICES.md) · [Releases](https://github.com/yateshr/KeyboardWriterHelper/releases)
+[![CI](https://github.com/yateshr/KeyboardWriterHelper/actions/workflows/ci.yml/badge.svg)](https://github.com/yateshr/KeyboardWriterHelper/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/yateshr/KeyboardWriterHelper)](https://github.com/yateshr/KeyboardWriterHelper/releases)
+
+[Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Licence](LICENSE) · [Third-party credits](THIRD_PARTY_NOTICES.md) · [Releases](https://github.com/yateshr/KeyboardWriterHelper/releases)
 
 Made by YATESH ROHIT.
 
@@ -24,8 +26,33 @@ Two versions, same program:
 - **Portable** (`KeyboardWriterHelper-net40.exe` or the zip): nothing to install. Run it from any folder.
 
 Get them from the [Releases](https://github.com/yateshr/KeyboardWriterHelper/releases) page.
+
+Install without the wizard (for several PCs):
+
+```cmd
+KeyboardWriterHelper-Setup-<version>.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+KeyboardWriterHelper-Setup-<version>.exe /VERYSILENT /DIR="D:\Apps\KeyboardWriterHelper" /TASKS="startup"
+```
+
+The setup installs for the signed-in user only. The app updates itself (Settings > About); a copy installed in a
+folder Windows protects, such as Program Files, cannot, so the default folder is in your profile.
+
+If a word is not corrected, open **Settings > Diagnostics**: it shows whether the app is seeing your keys, which
+programs were skipped and why, and has a **Copy report** button to paste into a bug report.
 To build the installer yourself you need [Inno Setup 6](https://jrsoftware.org/isinfo.php):
 `installer\build-installer.cmd`.
+
+## Licence
+
+Free for personal and other non-commercial use, under the
+[PolyForm Noncommercial License 1.0.0](LICENSE). You may use it, change it and share it, as long as you keep the
+credit line (`Required Notice: Copyright (c) 2026 YATESH ROHIT (https://github.com/yateshr/KeyboardWriterHelper)`)
+and a link to this repository. You may **not** sell it or use it commercially. For a commercial licence,
+contact the author through GitHub.
+
+The word data (misspelling lists, frequency counts, dictionaries) comes from other open projects and keeps
+their own licences: see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). This licence covers the code and
+design written for this project.
 
 ## Screenshots
 
