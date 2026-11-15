@@ -15,6 +15,21 @@ Newest first. Versions 1.1 to 1.10, then 2.1, 2.2... (see `version.txt`).
   problems, confirmations) use the same colours and type, instead of the grey Windows boxes.
 - **New logo**: a green keycap with an A and a check badge, drawn from shapes so it is sharp at every size.
   Used for the app icon, the tray icon (green, grey or amber), the settings window and the installer.
+- **Settings > Diagnostics**: whether the app is seeing your keys, which programs were skipped and why,
+  where it runs (including "runs as administrator"), and a **Copy report** button for bug reports. It holds
+  numbers and program names only. Errors the app caught are also written to an error log you can open there.
+- **Careful programs** (Settings > Programs): in the programs you list, only clear spelling mistakes are fixed,
+  when you press Space: no grammar or phrase changes, no capitals, no symbols, no suggestion bar.
+- **Where the suggestion bar appears** is a setting: bottom left (the new default), bottom right, top left or top right.
+- **Back up**: save My words, My fixes and your program lists to one text file, and load them on another PC.
+- A short **welcome** the first time it runs, instead of a balloon that disappears.
+- More Hindi words typed in English letters are left alone.
+- The settings window has an automatic **layout test** (every page at three window sizes). It found and fixed
+  buttons running past the edge, a sideways scrollbar, and a side menu that did not fit a small window.
+- **Licence**: PolyForm Noncommercial 1.0.0. Free for personal and non-commercial use with credit and a link to
+  the repository; no commercial use. Contributing guide, issue templates and a release checklist are new too.
+- Packaging for **winget** and **Scoop** can be generated from a release (`packaging\make-manifests.ps1`), and the
+  release workflow signs the exe and the installer when a certificate is added as a repository secret.
 - About shows who made the app.
 - **Installer.** There are now two downloads: the portable exe as before, and a setup
   (`KeyboardWriterHelper-Setup-<version>.exe`) with a welcome picture, a "before you install"

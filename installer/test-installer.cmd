@@ -12,6 +12,13 @@ if not exist "%SETUP%" (
     exit /b 1
 )
 
+rem A running copy of the app makes setup refuse (on purpose), so there is nothing to test then.
+tasklist /FI "IMAGENAME eq KeyboardWriterHelper*" /NH 2>nul | find /I "KeyboardWriterHelper" >nul
+if not errorlevel 1 (
+    echo [SKIPPED] Keyboard Writer Helper is running here; exit it from the tray and run this again.
+    exit /b 0
+)
+
 set TARGET=%TEMP%\kwh-install-test-%RANDOM%
 echo --- silent install into %TARGET% ---
 "%SETUP%" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR="%TARGET%" /TASKS=""

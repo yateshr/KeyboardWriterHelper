@@ -38,7 +38,9 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 UninstallDisplayName={#MyAppName}
 
 ; The app holds this name while it runs; setup asks the user to close it.
+#ifndef TestBuild
 AppMutex=KeyboardWriterHelper.SingleInstance
+#endif
 CloseApplications=no
 
 SetupIconFile=..\assets\icon.ico
