@@ -356,7 +356,7 @@ namespace KeyboardWriterHelper
                     o.SmartDashes, delegate(bool v) { o.SmartDashes = o.SmartArrows = o.SmartEllipsis = v; o.Save(); })));
             page.Controls.Add(Heading("Suggestions", false));
             page.Controls.Add(Group(
-                Toggle("Show suggestions in the top-right corner", "A small bar lists the other possible words after a fix, and Smart Compose's guess.",
+                Toggle("Show suggestions in the bottom-left corner", "A small bar lists the other possible words after a fix, and Smart Compose's guess.",
                     o.ShowCandidatePopup, delegate(bool v) { o.ShowCandidatePopup = v; o.Save(); }),
                 Toggle("Smart Compose", "Guesses the next word from the words before it. Tab accepts it while it is shown.",
                     o.SmartCompose, delegate(bool v) { o.SmartCompose = v; o.Save(); })));

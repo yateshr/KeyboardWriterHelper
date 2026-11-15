@@ -9,7 +9,7 @@ namespace KeyboardWriterHelper
 {
     // ---- Floating Candidate Popup ----
 
-    // The bar in the top right corner of the screen being typed on: the choices
+    // The bar in the bottom left corner of the screen being typed on: the choices
     // after a correction, or the Tab suggestion. Everything is measured from
     // `scale`, which is worked out again for the screen it is shown on, so it is
     // the same size to the eye on a laptop, a 4K display with Windows scaling,
@@ -168,7 +168,7 @@ namespace KeyboardWriterHelper
             Present(screen, Math.Min(Math.Max(S(180), width), maxWidth));
         }
 
-        // Always the top right corner of the screen being typed on, so it is in the
+        // Always the bottom left corner of the screen being typed on, so it is in the
         // same place every time and never covers the text. The size is set after
         // the window is shown too: moving to a screen with other scaling can make
         // Windows resize it.
@@ -176,7 +176,7 @@ namespace KeyboardWriterHelper
         {
             Rectangle area = screen.WorkingArea;
             Size size = new Size(width, Math.Max(S(36), popupFont.Height + S(16)));
-            Rectangle bounds = new Rectangle(new Point(area.Right - size.Width - S(20), area.Top + S(20)), size);
+            Rectangle bounds = new Rectangle(new Point(area.Left + S(20), area.Bottom - size.Height - S(20)), size);
             Bounds = bounds;
             Invalidate();
             if (!Visible) Show();

@@ -10,7 +10,8 @@ Newest first. Versions 1.1 to 1.10, then 2.1, 2.2... (see `version.txt`).
   proper type (Segoe UI and Semibold in a fixed scale that follows Windows display scaling).
 - Light and dark, following the Windows app setting, including the title bar, scrollbars,
   lists, drop-downs and the tray menu. The window can be resized.
-- The suggestion bar in the top-right corner and every message (update available, update
+- **The suggestion bar now appears in the bottom-left corner** of the screen (it was top-right).
+- The suggestion bar and every message (update available, update
   problems, confirmations) use the same colours and type, instead of the grey Windows boxes.
 - **New logo**: a green keycap with an A and a check badge, drawn from shapes so it is sharp at every size.
   Used for the app icon, the tray icon (green, grey or amber), the settings window and the installer.
