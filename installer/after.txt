@@ -1,0 +1,29 @@
+Keyboard Writer Helper is installed.
+
+
+FIND IT
+
+Look for the green "Aa" icon in the system tray, next to the clock (click the small arrow if it is hidden). Green means it is correcting, grey means it is paused, amber means it is skipping the program in front.
+
+Right-click the icon for the menu: pause, recent corrections, settings and "Check for updates".
+
+
+THE FEW THINGS TO KNOW
+
+  - Type as usual. A misspelled word is fixed when you press Space.
+  - Backspace right after a fix undoes it.
+  - Ctrl+Alt+K pauses and resumes. Ctrl+Alt+N swaps in the next-best word right after a fix.
+  - The suggestion bar in the bottom-left corner of the screen shows the other possible words.
+  - Open Settings from the tray menu to choose what gets fixed, to add your own words and shortcuts, and to see the statistics.
+  - If a word is not corrected and you wonder why, Settings > Diagnostics shows whether the app is seeing your keys.
+
+
+UPDATES AND UNINSTALL
+
+The app checks for a newer version about once a day and says nothing unless there is one. You can switch that off in Settings > About.
+
+To remove it: Windows Settings > Apps > Installed apps > Keyboard Writer Helper > Uninstall. You will be asked whether to keep your settings.
+
+
+Made by YATESH ROHIT.
+Thank you for installing it.

@@ -21,59 +21,132 @@ namespace KeyboardWriterHelper
 {
     // ---- Settings window ----
 
+    // A side menu on the left, one page at a time on the right. The look (colours,
+    // type, controls) is in Theme.cs; this file is what each page says and does.
     sealed class SettingsForm : Form
     {
         const string Arrow = "  →  ";
-        // Usable width and left edge inside a tab page.
-        const int Left0 = 12, Wide = 520;
+        const string Home = "https://github.com/yateshr/KeyboardWriterHelper";
 
         readonly TrayApp app;
-        readonly Label statsLabel = new Label(), aboutLabel = new Label();
+        readonly ListFrame wordsFrame, fixesFrame, appsFrame, carefulFrame, typosFrame, learningFrame;
+        readonly ListBox wordsList, fixesList, appsList, carefulList, typosList, learningList;
+        readonly TextBlock learningStatus;
+        readonly Btn frequentTypos, recentTypos;
+        readonly TileRow sessionTiles, allTimeTiles, healthTiles;
+        readonly TextBlock healthError;
+        readonly TileRow diagTiles1, diagTiles2;
+        readonly TextBlock diagHint, diagIgnored, diagWhere;
+        readonly StatusView status;
+        readonly PageHeader header;
+        readonly Panel pageHost, sidebar;
+        readonly Stack nav;
+        readonly List<NavItem> navItems = new List<NavItem>();
+        readonly List<Control> pages = new List<Control>();
+        readonly List<string[]> titles = new List<string[]>();
         readonly System.Windows.Forms.Timer refresh = new System.Windows.Forms.Timer();
-        readonly ListBox wordsList = new ListBox(), fixesList = new ListBox(), appsList = new ListBox(), typosList = new ListBox();
-        readonly ListBox learningList = new ListBox();
-        readonly Label learningStatus = new Label();
-        readonly RadioButton frequentTypos = new RadioButton(), recentTypos = new RadioButton();
-        string[] shownWords = new string[0], shownFixes = new string[0], shownApps = new string[0], shownTypos = new string[0];
+        string[] shownWords = new string[0], shownFixes = new string[0], shownApps = new string[0], shownTypos = new string[0], shownCareful = new string[0];
         string[] shownLearning = new string[0];
         PersonalLearningEntry[] learningItems = new PersonalLearningEntry[0];
         // { typed, fix } behind each line of the typos list.
         string[][] typoItems = new string[0][];
+        bool frequentChosen = true;
+        int current = -1;
+        static int lastPage;
+
+        int P(int pixelsAt96) { return Theme.Px(this, pixelsAt96); }
 
         public SettingsForm(TrayApp app)
         {
             this.app = app;
-            // Everything below is laid out in pixels at 96 DPI; Windows scaling
-            // (125%, 150%...) then grows the window and its controls together,
-            // instead of only the text, which got cut off.
+            Theme.Load();
+            status = new StatusView();
+            header = new PageHeader();
+            pageHost = new Panel();
+            sidebar = new Panel();
+            nav = new Stack();
             SuspendLayout();
-            AutoScaleDimensions = new SizeF(96F, 96F);
-            AutoScaleMode = AutoScaleMode.Dpi;
+            // Sizes are worked out from the window's own DPI (see Theme.cs), so
+            // WinForms' own scaling is off.
+            AutoScaleMode = AutoScaleMode.None;
+            DoubleBuffered = true;
+            Font = Theme.Get(Face.Body, DeviceDpi);
+            BackColor = Theme.Bg;
+            ForeColor = Theme.Text;
             Text = TrayApp.AppName + " - settings";
             StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(Wide + 2 * Left0 + 8, 440);
-            FormBorderStyle = FormBorderStyle.FixedDialog;
-            MaximizeBox = false;
-            Font = new Font("Segoe UI", 9f);
+            ClientSize = new Size(P(920), P(660));
+            MinimumSize = new Size(P(780), P(540));
+            try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch (Exception) { }
 
-            TabControl tabs = new TabControl();
-            tabs.Dock = DockStyle.Fill;
-            tabs.TabPages.Add(GeneralTab());
-            tabs.TabPages.Add(CorrectionsTab());
-            tabs.TabPages.Add(ListTab("My words", wordsList,
-                "Words listed here are never auto-corrected.", "&Add word", AddWord, RemoveWord, null));
-            tabs.TabPages.Add(ListTab("My fixes", fixesList,
-                "Your own fixes, shortcuts and snippets:  typo=correction . " +
-                "Supports {date}, {time}, {datetime}, {clip} (e.g. now={time}, today={date}, myclip={clip}).",
-                "&Add fix", AddFix, RemoveFix, null));
-            tabs.TabPages.Add(ListTab("Programs", appsList,
-                "Nothing typed in these programs is corrected. The tray icon turns amber while one of them is in front.",
-                "&Add program", AddProgram, RemoveProgram, "Add the program in front (now)"));
-            tabs.TabPages.Add(TyposTab());
-            tabs.TabPages.Add(LearningTab());
-            tabs.TabPages.Add(StatsTab());
-            Controls.Add(tabs);
-            ResumeLayout(false);
+            wordsFrame = new ListFrame("No words yet. Words you add here are never changed.");
+            fixesFrame = new ListFrame("No fixes yet. Add one as typo=correction.");
+            appsFrame = new ListFrame("No programs listed.");
+            carefulFrame = new ListFrame("No careful programs. Add one to fix only clear spelling mistakes in it.");
+            typosFrame = new ListFrame("Nothing corrected yet. Fixes made while you type show up here.");
+            learningFrame = new ListFrame("Nothing learned yet.");
+            wordsList = wordsFrame.List;
+            fixesList = fixesFrame.List;
+            appsList = appsFrame.List;
+            carefulList = carefulFrame.List;
+            typosList = typosFrame.List;
+            learningList = learningFrame.List;
+            wordsList.SelectionMode = fixesList.SelectionMode = appsList.SelectionMode = carefulList.SelectionMode = learningList.SelectionMode = SelectionMode.MultiExtended;
+            learningList.HorizontalScrollbar = true;
+            learningStatus = new TextBlock("", Face.Caption, null);
+            frequentTypos = new Btn("Most frequent", ButtonKind.Tab);
+            recentTypos = new Btn("Most recent", ButtonKind.Tab);
+            sessionTiles = new TileRow(new string[] { "Words checked", "Corrections made", "Corrections you undid" });
+            allTimeTiles = new TileRow(new string[] { "Words checked", "Corrections made", "Of corrections undone" });
+            healthTiles = new TileRow(new string[] { "Slowest key (ms)", "Slow lookups skipped", "Errors" });
+            healthError = new TextBlock("", Face.Caption, Theme.Danger);
+            diagTiles1 = new TileRow(new string[] { "Keys seen", "Words checked", "Corrections made" });
+            diagTiles2 = new TileRow(new string[] { "Keyboard hook put back", "Errors caught", "Slowest key (ms)" });
+            diagHint = new TextBlock("", Face.Body, null);
+            diagIgnored = new TextBlock("", Face.Body, null);
+            diagWhere = new TextBlock("", Face.Body, null);
+
+            AddPage("General", "", "General", "The basics: when it runs, the shortcuts and the language.", GeneralPage());
+            AddPage("Corrections", "", "Corrections", "Choose what gets fixed while you type.", CorrectionsPage());
+            AddPage("My words", "", "My words", "Words you use that are spelled right. They are never changed.",
+                ListPage(wordsFrame, "Type a word and press Enter", "Add word", AddWord, RemoveWord, null));
+            AddPage("My fixes", "", "My fixes", "Your own shortcuts and snippets: typo=correction. Supports {date}, {time}, {datetime} and {clip}.",
+                ListPage(fixesFrame, "brb=be right back", "Add fix", AddFix, RemoveFix, null));
+            AddPage("Programs", "", "Programs", "Choose programs where it stays out of the way, or is extra careful.", ProgramsPage());
+            AddPage("Typos", "", "Typos", "The fixes the app made. Mark one as always or never.", TyposPage());
+            AddPage("Learning", "", "Learning", "The app can learn from how you undo and choose corrections.", LearningPage());
+            AddPage("Statistics", "", "Statistics", "Numbers only. Nothing you type is ever recorded here.", StatsPage());
+            AddPage("Diagnostics", "", "Diagnostics", "Is it working? What the app sees, and why a key might be ignored.", DiagnosticsPage());
+            AddPage("About", "", "About", "Version, updates and credits.", AboutPage());
+
+            // Fill first, then the edges: that is the order WinForms docks in.
+            Panel content = new Panel();
+            content.Dock = DockStyle.Fill;
+            content.BackColor = Theme.Bg;
+            pageHost.Dock = DockStyle.Fill;
+            pageHost.BackColor = Theme.Bg;
+            header.Dock = DockStyle.Top;
+            content.Controls.Add(pageHost);
+            content.Controls.Add(header);
+
+            sidebar.Dock = DockStyle.Left;
+            sidebar.BackColor = Theme.Sidebar;
+            nav.Dock = DockStyle.Fill;
+            nav.BackColor = Theme.Sidebar;
+            nav.Padding = new Padding(0, P(4), 0, 0);
+            status.Dock = DockStyle.Bottom;
+            BrandView brand = new BrandView();
+            brand.Dock = DockStyle.Top;
+            sidebar.Controls.Add(nav);
+            sidebar.Controls.Add(status);
+            sidebar.Controls.Add(brand);
+            foreach (NavItem item in navItems) nav.Controls.Add(item);
+
+            Controls.Add(content);
+            Controls.Add(sidebar);
+            ApplySizes();
+            ShowPage(Math.Min(lastPage, pages.Count - 1));
+            ResumeLayout(true);
 
             refresh.Interval = 1000;
             refresh.Tick += delegate { Reload(); };
@@ -81,79 +154,243 @@ namespace KeyboardWriterHelper
             FormClosed += delegate { refresh.Stop(); };
         }
 
-        TabPage GeneralTab()
+        protected override void OnHandleCreated(EventArgs e)
         {
-            TabPage page = new TabPage("General");
-            CheckBox on = Check("Auto-correct is on", app.Enabled, delegate(bool v) { app.Enabled = v; });
-            on.SetBounds(Left0, 12, Wide, 24);
-            CheckBox startup = Check("Start with Windows", TrayApp.IsStartupEnabled(), delegate(bool v) { app.SetStartup(v); });
-            startup.SetBounds(Left0, 40, Wide, 24);
+            base.OnHandleCreated(e);
+            Theme.StyleTitleBar(this);
+        }
 
-            TextBox pauseBox = HotkeyBox(
+        protected override void OnDpiChanged(DpiChangedEventArgs e)
+        {
+            base.OnDpiChanged(e);
+            Font = Theme.Get(Face.Body, DeviceDpi);
+            ApplySizes();
+        }
+
+        void ApplySizes()
+        {
+            sidebar.Width = P(244);
+            status.Height = P(52);
+            header.Height = header.HeightFor(header.Width);
+            nav.Padding = new Padding(0, P(4), 0, 0);
+            MinimumSize = new Size(P(780), P(540));
+        }
+
+        // Opens every page at three window sizes and reports what does not fit: text that
+        // needs more room than it has, or a control that runs past the edge. Used by the tests.
+        public List<string> CheckLayout()
+        {
+            List<string> problems = new List<string>();
+            Size[] sizes = { new Size(P(780), P(540)), new Size(P(920), P(660)), new Size(P(1400), P(900)) };
+            Show();
+            foreach (Size size in sizes)
+            {
+                ClientSize = size;
+                for (int i = 0; i < pages.Count; i++)
+                {
+                    ShowPage(i);
+                    Reload();
+                    for (int k = 0; k < 4; k++) { Application.DoEvents(); Thread.Sleep(20); }
+                    int before = problems.Count;
+                    CheckControls(pages[i], titles[i][0] + " at " + size.Width + "x" + size.Height, problems);
+                    if (problems.Count > before)
+                    {
+                        string picture = Path.Combine(Path.GetTempPath(), "kwh-layout-" + titles[i][0] + "-" + size.Width + "x" + size.Height + ".png");
+                        try
+                        {
+                            using (Bitmap bmp = new Bitmap(Width, Height))
+                            {
+                                DrawToBitmap(bmp, new Rectangle(0, 0, Width, Height));
+                                bmp.Save(picture, System.Drawing.Imaging.ImageFormat.Png);
+                            }
+                            problems.Add("  (picture: " + picture + ")");
+                        }
+                        catch (Exception) { }
+                    }
+                }
+            }
+            Hide();
+            return problems;
+        }
+
+        static void CheckControls(Control parent, string where, List<string> problems)
+        {
+            foreach (Control child in parent.Controls)
+            {
+                if (!child.Visible || child.Width <= 0) continue;
+                IFlow flow = child as IFlow;
+                if (flow != null && flow.Measure(child.Width) > child.Height + 2)
+                    problems.Add(where + ": " + child.GetType().Name + " is " + child.Height + " px tall but its text needs " + flow.Measure(child.Width));
+                if (child.Right > parent.ClientSize.Width + 1)
+                    problems.Add(where + ": " + child.GetType().Name + " runs past the right edge (" + child.Right + " > " + parent.ClientSize.Width + ")");
+                if (!(parent is Stack) && child.Bottom > parent.ClientSize.Height + 1)
+                    problems.Add(where + ": " + child.GetType().Name + " runs past the bottom edge");
+                CheckControls(child, where, problems);
+            }
+        }
+
+        // One PNG per page, to look at the design without clicking through it.
+        public void SaveShots(string folder)
+        {
+            for (int i = 0; i < pages.Count; i++)
+            {
+                ShowPage(i);
+                Reload();
+                for (int k = 0; k < 5; k++) { Application.DoEvents(); Thread.Sleep(40); }
+                using (Bitmap bmp = new Bitmap(Width, Height))
+                {
+                    DrawToBitmap(bmp, new Rectangle(0, 0, Width, Height));
+                    bmp.Save(Path.Combine(folder, "page-" + i + "-" + titles[i][0].Replace(' ', '-') + ".png"), System.Drawing.Imaging.ImageFormat.Png);
+                }
+            }
+        }
+
+        void AddPage(string caption, string glyph, string title, string subtitle, Control page)
+        {
+            NavItem item = new NavItem(caption, glyph);
+            int index = navItems.Count;
+            item.Click += delegate { ShowPage(index); };
+            navItems.Add(item);
+            page.Dock = DockStyle.Fill;
+            page.Visible = false;
+            pageHost.Padding = new Padding(P(36), 0, P(36), P(24));
+            pageHost.Controls.Add(page);
+            pages.Add(page);
+            titles.Add(new string[] { title, subtitle });
+        }
+
+        void ShowPage(int index)
+        {
+            if (index == current) return;
+            current = lastPage = index;
+            for (int i = 0; i < pages.Count; i++)
+            {
+                navItems[i].Selected = i == index;
+                navItems[i].Invalidate();
+                pages[i].Visible = i == index;
+            }
+            header.Set(titles[index][0], titles[index][1]);
+            pages[index].Focus();
+        }
+
+        // ---- Building blocks ----
+
+        static TextBlock Heading(string text, bool first)
+        {
+            TextBlock block = new TextBlock(text, Face.Heading, null);
+            block.Margin = new Padding(0, first ? 4 : 26, 0, 10);
+            block.AccessibleRole = AccessibleRole.Grouping;
+            return block;
+        }
+
+        static TextBlock Note(string text)
+        {
+            TextBlock block = new TextBlock(text, Face.Caption, null);
+            block.Margin = new Padding(0, 14, 0, 0);
+            return block;
+        }
+
+        static Card Group(params Control[] rows)
+        {
+            Card card = new Card();
+            foreach (Control row in rows) card.Controls.Add(row);
+            return card;
+        }
+
+        static ToggleRow Toggle(string title, string description, bool value, Action<bool> changed)
+        {
+            ToggleRow row = new ToggleRow(title, description, value);
+            row.CheckedChanged += delegate { changed(row.Checked); };
+            return row;
+        }
+
+        Stack NewStack()
+        {
+            Stack stack = new Stack();
+            stack.Padding = new Padding(0, 0, P(6), P(16));
+            return stack;
+        }
+
+        // ---- Pages ----
+
+        Control GeneralPage()
+        {
+            Stack page = NewStack();
+
+            Field pauseBox = HotkeyBox(
                 delegate { return app.Settings.PauseHotkey; }, delegate(Hotkey h) { app.Settings.PauseHotkey = h; },
                 delegate { return app.Settings.NextHotkey; });
-            pauseBox.SetBounds(Left0 + 230, 84, 150, 24);
-            TextBox nextBox = HotkeyBox(
+            Field nextBox = HotkeyBox(
                 delegate { return app.Settings.NextHotkey; }, delegate(Hotkey h) { app.Settings.NextHotkey = h; },
                 delegate { return app.Settings.PauseHotkey; });
-            nextBox.SetBounds(Left0 + 230, 114, 150, 24);
 
-            ComboBox language = new ComboBox();
-            language.DropDownStyle = ComboBoxStyle.DropDownList;
-            language.SetBounds(Left0 + 230, 196, 230, 24);
+            Dropdown language = new Dropdown();
             string[] installed = app.InstalledLanguages;
             foreach (string tag in installed) language.Items.Add(LanguageName(tag));
             int chosen = Array.FindIndex(installed, delegate(string tag) { return string.Equals(tag, app.Settings.MainLanguage, StringComparison.OrdinalIgnoreCase); });
-            language.SelectedIndex = Math.Max(0, chosen);
+            language.Choose(Math.Max(0, chosen));
             language.SelectedIndexChanged += delegate
             {
                 app.Settings.MainLanguage = installed[language.SelectedIndex];
                 SpellingChanged();
             };
-            CheckBox variants = Check("The other English spellings are correct too (colour and color are both left alone)",
-                app.Settings.AcceptVariants, delegate(bool v) { app.Settings.AcceptVariants = v; SpellingChanged(); });
-            variants.SetBounds(Left0, 226, Wide, 24);
 
-            ComboBox layoutBox = new ComboBox();
-            layoutBox.DropDownStyle = ComboBoxStyle.DropDownList;
-            layoutBox.SetBounds(Left0 + 230, 256, 160, 24);
-            layoutBox.Items.AddRange(new object[] { "Auto", "QWERTY", "QWERTZ", "AZERTY", "Dvorak", "Colemak" });
-            int layoutIdx = layoutBox.FindStringExact(app.Settings.KeyboardLayout);
-            layoutBox.SelectedIndex = layoutIdx >= 0 ? layoutIdx : 0;
+            Dropdown layoutBox = new Dropdown();
+            layoutBox.Items.AddRange(new string[] { "Auto", "QWERTY", "QWERTZ", "AZERTY", "Dvorak", "Colemak" });
+            int layoutIdx = layoutBox.Items.IndexOf(app.Settings.KeyboardLayout);
+            layoutBox.Choose(layoutIdx >= 0 ? layoutIdx : 0);
             layoutBox.SelectedIndexChanged += delegate
             {
-                app.Settings.KeyboardLayout = (string)layoutBox.SelectedItem;
+                app.Settings.KeyboardLayout = layoutBox.Items[layoutBox.SelectedIndex];
                 SpellingChanged();
             };
 
-            aboutLabel.SetBounds(Left0, 340, Wide, 78);
-            aboutLabel.ForeColor = SystemColors.GrayText;
-            ShowAbout();
+            page.Controls.Add(Heading("Auto-correct", true));
+            page.Controls.Add(Group(
+                Toggle("Auto-correct is on", "Fixes misspelled words as you type, in every program.", app.Enabled, delegate(bool v) { app.Enabled = v; }),
+                Toggle("Start with Windows", "Runs quietly in the tray each time you sign in.", TrayApp.IsStartupEnabled(), delegate(bool v) { app.SetStartup(v); })));
+            page.Controls.Add(Heading("Shortcuts", false));
+            page.Controls.Add(Group(
+                new ValueRow("Pause and resume", "Click the box, then press the new keys. Use Ctrl or Alt.", pauseBox, 190),
+                new ValueRow("Next suggestion", "Works straight after a fix: swaps in the next-best word.", nextBox, 190)));
+            page.Controls.Add(Heading("Language", false));
+            page.Controls.Add(Group(
+                new ValueRow("Suggestions use the spelling of", "The English that the suggestions follow.", language, 250),
+                Toggle("Other English spellings are correct too", "Colour and color are both left alone.",
+                    app.Settings.AcceptVariants, delegate(bool v) { app.Settings.AcceptVariants = v; SpellingChanged(); }),
+                new ValueRow("Keyboard layout", "Used to guess which neighbouring key you meant. Auto follows Windows.", layoutBox, 190)));
 
-            page.Controls.AddRange(new Control[] {
-                on, startup,
-                Caption("Shortcut to pause and resume:", 87), pauseBox,
-                Caption("Shortcut for the next suggestion:", 117), nextBox,
-                Note("To change a shortcut, click its box and press the new keys (with Ctrl or Alt). " +
-                     "The next-suggestion shortcut works straight after a fix: it swaps in the next-best word.", 144, 36),
-                Caption("Suggestions use the spelling of:", 199), language, variants,
-                Caption("Keyboard layout proximity:", 259), layoutBox, aboutLabel });
+            Btn export = new Btn("Export...", ButtonKind.Secondary);
+            export.Click += delegate { ExportData(); };
+            Btn import = new Btn("Import...", ButtonKind.Secondary);
+            import.Click += delegate { ImportData(); };
+            page.Controls.Add(Heading("Back up", false));
+            page.Controls.Add(Group(
+                new ValueRow("Save my words, fixes and programs", "Writes them to one text file, to keep or to move to another PC.", export, 130),
+                new ValueRow("Load them from a file", "Adds what is in the file to what you already have. Nothing is removed.", import, 130)));
             return page;
+        }
+
+        static readonly string[] CornerNames = { "BottomLeft", "BottomRight", "TopLeft", "TopRight" };
+
+        Dropdown CornerDropdown()
+        {
+            Dropdown box = new Dropdown();
+            box.Items.AddRange(new string[] { "Bottom left", "Bottom right", "Top left", "Top right" });
+            int at = Array.IndexOf(CornerNames, app.Settings.PopupCorner);
+            box.Choose(at >= 0 ? at : 0);
+            box.SelectedIndexChanged += delegate
+            {
+                app.Settings.PopupCorner = CornerNames[box.SelectedIndex];
+                app.Settings.Save();
+            };
+            return box;
         }
 
         void SpellingChanged()
         {
             app.Settings.Save();
             app.ApplySpelling();
-            ShowAbout();
-        }
-
-        void ShowAbout()
-        {
-            aboutLabel.Text = TrayApp.AppName + " " + Program.Version + "\r\n" +
-                "Offline spelling, grammar and Smart Compose assistance.\r\n" +
-                "Predictions stay on this computer; nothing you type is uploaded.\r\n" +
-                "Dictionaries in use: " + app.Languages;
         }
 
         static string LanguageName(string tag)
@@ -162,32 +399,14 @@ namespace KeyboardWriterHelper
             catch (CultureNotFoundException) { return tag; }
         }
 
-        static Label Caption(string text, int top)
-        {
-            Label label = new Label();
-            label.Text = text;
-            label.SetBounds(Left0, top, 226, 20);
-            return label;
-        }
-
-        static Label Note(string text, int top, int height)
-        {
-            Label label = new Label();
-            label.Text = text;
-            label.ForeColor = SystemColors.GrayText;
-            label.SetBounds(Left0, top, Wide, height);
-            return label;
-        }
-
         // Shows a shortcut and takes a new one when keys are pressed in it.
         // other = the shortcut it must not be the same as.
-        TextBox HotkeyBox(Func<Hotkey> get, Action<Hotkey> set, Func<Hotkey> other)
+        Field HotkeyBox(Func<Hotkey> get, Action<Hotkey> set, Func<Hotkey> other)
         {
-            TextBox box = new TextBox();
-            box.ReadOnly = true;
-            box.BackColor = SystemColors.Window;
-            box.Text = get().ToString();
-            box.KeyDown += delegate(object sender, KeyEventArgs e)
+            Field field = new Field(true);
+            field.Placeholder = "Press the keys";
+            field.Input.Text = get().ToString();
+            field.Input.KeyDown += delegate(object sender, KeyEventArgs e)
             {
                 e.SuppressKeyPress = true;
                 Hotkey pressed = new Hotkey(e.Control, e.Alt, e.Shift, e.KeyCode);
@@ -195,134 +414,189 @@ namespace KeyboardWriterHelper
                 set(pressed);
                 app.Settings.Save();
                 app.ShowState();
-                box.Text = pressed.ToString();
+                field.Input.Text = pressed.ToString();
             };
-            return box;
+            return field;
         }
 
-        TabPage CorrectionsTab()
+        Control CorrectionsPage()
         {
-            TabPage page = new TabPage("Corrections");
-            FlowLayoutPanel flow = new FlowLayoutPanel();
-            flow.Dock = DockStyle.Fill;
-            flow.FlowDirection = FlowDirection.TopDown;
-            flow.WrapContents = false;
-            flow.Padding = new Padding(Left0 - 3, 8, 0, 0);
+            Stack page = NewStack();
             Settings o = app.Settings;
-            flow.Controls.Add(Check("Fix a word as soon as , ; : ! or ? is typed after it (otherwise: when Space is pressed)",
-                o.FixOnPunctuation, delegate(bool v) { o.FixOnPunctuation = v; o.Save(); }));
-            flow.Controls.Add(Check("Capitalise the first word of a sentence (after . ! or ? and a space)",
-                o.CapitalizeSentences, delegate(bool v) { o.CapitalizeSentences = v; o.Save(); }));
-            flow.Controls.Add(Check("Fix two capitals at the start of a word (THe → The)",
-                o.FixTwoCapitals, delegate(bool v) { o.FixTwoCapitals = v; o.Save(); }));
-            flow.Controls.Add(Check("Fix grammar and phrase mistakes (the files is → the files are; their is → there is)",
-                o.FixPhrases, delegate(bool v) { o.FixPhrases = v; o.Save(); }));
-            flow.Controls.Add(Check("Let the word before help choose the fix when several words are possible",
-                o.UseContext, delegate(bool v) { o.UseContext = v; SpellingChanged(); }));
-            flow.Controls.Add(Check("Turn two spaces after a word into a full stop and a space",
-                o.DoubleSpacePeriod, delegate(bool v) { o.DoubleSpacePeriod = v; o.Save(); }));
-            flow.Controls.Add(Check("Smart typography: dashes (-- to —), ellipsis (... to …), and arrows (-> to →, => to ⇒)",
-                o.SmartDashes, delegate(bool v) { o.SmartDashes = o.SmartArrows = o.SmartEllipsis = v; o.Save(); }));
-            flow.Controls.Add(Check("Skip correction in fullscreen games and exclusive-mode programs",
-                o.SkipFullscreenGames, delegate(bool v) { o.SkipFullscreenGames = v; o.Save(); }));
-            flow.Controls.Add(Check("Show the floating pill with the other suggestions (and Smart Compose's guess)",
-                o.ShowCandidatePopup, delegate(bool v) { o.ShowCandidatePopup = v; o.Save(); }));
-            flow.Controls.Add(Check("Smart Compose: guess the next word from the words before (Tab accepts it while shown)",
-                o.SmartCompose, delegate(bool v) { o.SmartCompose = v; o.Save(); }));
-            flow.Controls.Add(Check("Check for a new version now and then (you are only told when there is one)",
-                o.CheckForUpdates, delegate(bool v) { o.CheckForUpdates = v; o.Save(); }));
-            Label note = Note(
-                "Backspace right after a fix undoes it. Turn on personal learning in the Learning tab to remember your feedback.\r\n\r\n" +
-                "A full stop never triggers a fix by itself (example.com is not a sentence); the next Space does.", 0, 80);
-            note.Margin = new Padding(3, 14, 3, 3);
-            flow.Controls.Add(note);
-            page.Controls.Add(flow);
+            page.Controls.Add(Heading("While you type", true));
+            page.Controls.Add(Group(
+                Toggle("Fix a word as soon as punctuation follows", "A comma, semicolon, colon, ! or ? after a word fixes it at once. Otherwise a fix happens when you press Space.",
+                    o.FixOnPunctuation, delegate(bool v) { o.FixOnPunctuation = v; o.Save(); }),
+                Toggle("Capitalise the first word of a sentence", "After a full stop, ! or ? and a space.",
+                    o.CapitalizeSentences, delegate(bool v) { o.CapitalizeSentences = v; o.Save(); }),
+                Toggle("Fix two capitals at the start of a word", "THe becomes The.",
+                    o.FixTwoCapitals, delegate(bool v) { o.FixTwoCapitals = v; o.Save(); }),
+                Toggle("Fix grammar and phrase mistakes", "The files is becomes the files are. Their is becomes there is.",
+                    o.FixPhrases, delegate(bool v) { o.FixPhrases = v; o.Save(); }),
+                Toggle("Let the word before help choose the fix", "Used when several words are possible.",
+                    o.UseContext, delegate(bool v) { o.UseContext = v; SpellingChanged(); }),
+                Toggle("Turn two spaces into a full stop", "Two spaces after a word become a full stop and a space.",
+                    o.DoubleSpacePeriod, delegate(bool v) { o.DoubleSpacePeriod = v; o.Save(); })));
+            page.Controls.Add(Heading("Typography", false));
+            page.Controls.Add(Group(
+                Toggle("Smart dashes, ellipsis and arrows", "-- becomes —, ... becomes …, -> becomes → and => becomes ⇒.",
+                    o.SmartDashes, delegate(bool v) { o.SmartDashes = o.SmartArrows = o.SmartEllipsis = v; o.Save(); })));
+            page.Controls.Add(Heading("Suggestions", false));
+            page.Controls.Add(Group(
+                Toggle("Show suggestions in the bottom-left corner", "A small bar lists the other possible words after a fix, and Smart Compose's guess.",
+                    o.ShowCandidatePopup, delegate(bool v) { o.ShowCandidatePopup = v; o.Save(); }),
+                new ValueRow("Where the bar appears", "A corner of the screen you are typing on.", CornerDropdown(), 190),
+                Toggle("Smart Compose", "Guesses the next word from the words before it. Tab accepts it while it is shown.",
+                    o.SmartCompose, delegate(bool v) { o.SmartCompose = v; o.Save(); })));
+            page.Controls.Add(Heading("Where it works", false));
+            page.Controls.Add(Group(
+                Toggle("Skip full-screen games", "Does nothing in full-screen games and exclusive-mode programs, so it never gets in the way.",
+                    o.SkipFullscreenGames, delegate(bool v) { o.SkipFullscreenGames = v; o.Save(); })));
+            page.Controls.Add(Note("Backspace right after a fix undoes it. A full stop never triggers a fix by itself (example.com is not a sentence); the next Space does."));
             return page;
         }
 
-        static CheckBox Check(string text, bool value, Action<bool> changed)
-        {
-            CheckBox box = new CheckBox();
-            box.Text = text;
-            box.Checked = value;
-            box.AutoSize = false;
-            box.Size = new Size(Wide, 30);
-            box.CheckedChanged += delegate { changed(box.Checked); };
-            return box;
-        }
-
         // add returns false when the text was not usable (it then stays in the box).
-        TabPage ListTab(string title, ListBox list, string help, string addLabel, Func<string, bool> add, Action<string> remove, string addNowLabel)
+        Control ListPage(ListFrame frame, string hint, string addLabel, Func<string, bool> add, Action<string> remove, string addNowLabel)
         {
-            TabPage page = new TabPage(title);
-            Label label = new Label();
-            label.SetBounds(Left0, 10, Wide, 48);
-            label.Text = help;
-            list.SetBounds(Left0, 62, Wide, 250);
-            list.IntegralHeight = false;
-            list.SelectionMode = SelectionMode.MultiExtended;
-            list.TabIndex = 0;
-            TextBox input = new TextBox();
-            input.SetBounds(Left0, 324, Wide - 190, 24);
-            input.TabIndex = 1;
-            Button addButton = new Button();
-            addButton.Text = addLabel;
-            addButton.SetBounds(Left0 + Wide - 184, 322, 100, 27);
-            addButton.TabIndex = 2;
+            ToolPage page = new ToolPage();
+            Field input = new Field(false);
+            input.Placeholder = hint;
+            input.Input.AccessibleName = addLabel;
+            Btn addButton = new Btn(addLabel, ButtonKind.Primary);
             Action doAdd = delegate
             {
-                string text = input.Text.Trim();
+                string text = input.Input.Text.Trim();
                 if (text.Length == 0 || !add(text)) return;
-                input.Text = "";
+                input.Input.Text = "";
                 Reload();
             };
             addButton.Click += delegate { doAdd(); };
-            input.KeyDown += delegate(object s, KeyEventArgs e)
+            input.Input.KeyDown += delegate(object s, KeyEventArgs e)
             {
                 if (e.KeyCode != Keys.Enter) return;
                 e.SuppressKeyPress = true;
                 doAdd();
             };
-            Button removeButton = new Button();
-            removeButton.Text = "&Remove";
-            removeButton.SetBounds(Left0 + Wide - 78, 322, 78, 27);
-            removeButton.TabIndex = 3;
+            Btn removeButton = new Btn("Remove selected", ButtonKind.Secondary);
             removeButton.Click += delegate
             {
-                foreach (object item in new ArrayList(list.SelectedItems)) remove((string)item);
+                foreach (object item in new ArrayList(frame.List.SelectedItems)) remove((string)item);
                 Reload();
             };
-            page.Controls.AddRange(new Control[] { label, list, input, addButton, removeButton });
+            page.TopStretch = input;
+            page.TopEnd.Add(addButton);
             if (addNowLabel != null)
             {
-                Button now = new Button();
-                now.Text = addNowLabel;
-                now.SetBounds(Left0, 358, 240, 27);
+                Btn now = new Btn(addNowLabel, ButtonKind.Secondary);
                 now.Click += delegate
                 {
                     if (app.CurrentApp.Length > 0) add(app.CurrentApp);
                     Reload();
                 };
-                page.Controls.Add(now);
+                page.TopEnd.Insert(0, now);
             }
+            page.Fill = frame;
+            page.BottomEnd.Add(removeButton);
+            page.Controls.Add(frame);
+            page.Controls.Add(input);
+            foreach (Control c in page.TopEnd) page.Controls.Add(c);
+            page.Controls.Add(removeButton);
             return page;
         }
 
-        TabPage TyposTab()
+        // Two lists on one page: programs where nothing is corrected, and "careful" programs
+        // where only clear spelling mistakes are fixed (no grammar, capitals, symbols or guesses).
+        Control ProgramsPage()
         {
-            TabPage page = new TabPage("Typos");
-            frequentTypos.Text = "Most frequent";
-            frequentTypos.Checked = true;
-            frequentTypos.SetBounds(Left0, 10, 130, 24);
-            recentTypos.Text = "Most recent";
-            recentTypos.SetBounds(Left0 + 136, 10, 130, 24);
-            frequentTypos.CheckedChanged += delegate { Reload(); };
-            typosList.SetBounds(Left0, 40, Wide, 240);
-            typosList.IntegralHeight = false;
+            ToolPage page = new ToolPage();
+            Btn never = new Btn("Never correct", ButtonKind.Tab);
+            Btn careful = new Btn("Careful", ButtonKind.Tab);
+            never.Selected = true;
+            TextBlock info = new TextBlock("Nothing typed in these programs is corrected. The tray icon turns amber while one is in front.", Face.Caption, null);
+            ButtonSlot tabs = new ButtonSlot(never, careful);
+            Field input = new Field(false);
+            input.Placeholder = "notepad.exe";
+            input.Input.AccessibleName = "Program name";
+            Btn add = new Btn("Add program", ButtonKind.Primary);
+            Btn now = new Btn("Add the program in front", ButtonKind.Secondary);
+            Btn remove = new Btn("Remove selected", ButtonKind.Secondary);
 
-            Button always = new Button();
-            always.Text = "&Always fix it this way";
-            always.SetBounds(Left0, 290, 170, 27);
+            Func<bool> isCareful = delegate { return careful.Selected; };
+            Func<ListFile> file = delegate { return isCareful() ? app.CarefulApps : app.ExcludedApps; };
+            Func<ListFrame> frame = delegate { return isCareful() ? carefulFrame : appsFrame; };
+            Action<string> addName = delegate(string text)
+            {
+                if (!text.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) text += ".exe";
+                file().Add(text);
+                file().Sync();
+                Reload();
+            };
+            Action doAdd = delegate
+            {
+                string text = input.Input.Text.Trim();
+                if (text.Length == 0) return;
+                addName(text);
+                input.Input.Text = "";
+            };
+            add.Click += delegate { doAdd(); };
+            input.Input.KeyDown += delegate(object s, KeyEventArgs e)
+            {
+                if (e.KeyCode != Keys.Enter) return;
+                e.SuppressKeyPress = true;
+                doAdd();
+            };
+            now.Click += delegate { if (app.CurrentApp.Length > 0) addName(app.CurrentApp); };
+            remove.Click += delegate
+            {
+                foreach (object item in new ArrayList(frame().List.SelectedItems)) file().Remove((string)item);
+                file().Sync();
+                Reload();
+            };
+            Action<bool> choose = delegate(bool carefulList2)
+            {
+                never.Selected = !carefulList2;
+                careful.Selected = carefulList2;
+                never.Invalidate();
+                careful.Invalidate();
+                appsFrame.Visible = !carefulList2;
+                carefulFrame.Visible = carefulList2;
+                page.Fill = frame();
+                info.Value = carefulList2
+                    ? "In these programs only clear spelling mistakes are fixed, when you press Space: no grammar or phrase changes, no capital letters, no symbols, no suggestion bar. Good for chat, code or email programs."
+                    : "Nothing typed in these programs is corrected. The tray icon turns amber while one is in front.";
+                page.PerformLayout();
+            };
+            never.Click += delegate { choose(false); };
+            careful.Click += delegate { choose(true); };
+
+            carefulFrame.Visible = false;
+            page.Header.Add(tabs);
+            page.Header.Add(info);
+            page.TopStretch = input;
+            page.TopEnd.Add(now);
+            page.TopEnd.Add(add);
+            page.Fill = appsFrame;
+            page.Alternates.Add(carefulFrame);
+            page.BottomEnd.Add(remove);
+            page.Controls.Add(appsFrame);
+            page.Controls.Add(carefulFrame);
+            page.Controls.Add(tabs);
+            page.Controls.Add(info);
+            page.Controls.Add(input);
+            page.Controls.Add(now);
+            page.Controls.Add(add);
+            page.Controls.Add(remove);
+            return page;
+        }
+
+        Control TyposPage()
+        {
+            ToolPage page = new ToolPage();
+            frequentTypos.Selected = true;
+            frequentTypos.Click += delegate { frequentChosen = true; frequentTypos.Selected = true; recentTypos.Selected = false; frequentTypos.Invalidate(); recentTypos.Invalidate(); Reload(); };
+            recentTypos.Click += delegate { frequentChosen = false; frequentTypos.Selected = false; recentTypos.Selected = true; frequentTypos.Invalidate(); recentTypos.Invalidate(); Reload(); };
+            Btn always = new Btn("Always fix it this way", ButtonKind.Primary);
             always.Click += delegate
             {
                 string[] item = SelectedTypo();
@@ -330,9 +604,7 @@ namespace KeyboardWriterHelper
                 app.AlwaysFix(item[0], item[1]);
                 Reload();
             };
-            Button never = new Button();
-            never.Text = "&Never correct it";
-            never.SetBounds(Left0 + 178, 290, 140, 27);
+            Btn never = new Btn("Never correct it", ButtonKind.Secondary);
             never.Click += delegate
             {
                 string[] item = SelectedTypo();
@@ -340,13 +612,20 @@ namespace KeyboardWriterHelper
                 app.NeverCorrect(item[0]);
                 Reload();
             };
-            CheckBox remember = Check("Keep the counts between sessions (in a file on this PC only; unticking deletes it)",
-                app.Settings.RememberTypos, delegate(bool v) { app.SetRememberTypos(v); });
-            remember.SetBounds(Left0, 328, Wide, 24);
-            page.Controls.AddRange(new Control[] {
-                frequentTypos, recentTypos, typosList, always, never, remember,
-                Note("These are the fixes the app made. Unless the box above is ticked they are kept in memory only " +
-                     "and are gone when the app closes.", 356, 36) });
+            page.TopStart.Add(frequentTypos);
+            page.TopStart.Add(recentTypos);
+            page.Fill = typosFrame;
+            page.BottomStart.Add(always);
+            page.BottomStart.Add(never);
+            page.Footer.Add(Group(Toggle("Keep the counts between sessions",
+                "Saved in a file on this PC only. Switching this off deletes the file. Until then the counts live in memory and are gone when the app closes.",
+                app.Settings.RememberTypos, delegate(bool v) { app.SetRememberTypos(v); })));
+            page.Controls.Add(typosFrame);
+            page.Controls.Add(frequentTypos);
+            page.Controls.Add(recentTypos);
+            page.Controls.Add(always);
+            page.Controls.Add(never);
+            foreach (Control c in page.Footer) page.Controls.Add(c);
             return page;
         }
 
@@ -356,22 +635,16 @@ namespace KeyboardWriterHelper
             return i >= 0 && i < typoItems.Length ? typoItems[i] : null;
         }
 
-        TabPage LearningTab()
+        Control LearningPage()
         {
-            TabPage page = new TabPage("Learning");
-            CheckBox learn = Check("Learn from my corrections and keep preferences on this PC",
+            ToolPage page = new ToolPage();
+            ToggleRow learn = Toggle("Learn from my corrections",
+                "Keeps what you teach it on this PC. Turning it off pauses learning and the use of saved preferences.",
                 app.Settings.LearnPersonalVocabulary, delegate(bool on) { app.SetPersonalLearning(on); Reload(); });
-            learn.SetBounds(Left0, 10, Wide, 32);
-            Label help = Note("Undo a spelling or phrase correction twice to protect it. Choose the same alternative " +
-                "three times with the next-suggestion shortcut to learn a preferred fix; start the next word to confirm " +
-                "each choice. Turning learning off pauses learning and use of saved preferences.", 50, 58);
-            learningList.SetBounds(Left0, 116, Wide, 196);
-            learningList.IntegralHeight = false;
-            learningList.HorizontalScrollbar = true;
-            learningList.SelectionMode = SelectionMode.MultiExtended;
-            Button forget = new Button();
-            forget.Text = "&Forget selected";
-            forget.SetBounds(Left0, 324, 145, 28);
+            Card learnCard = Group(learn);
+            TextBlock help = new TextBlock("Undo a spelling or phrase correction twice to protect it. Choose the same alternative three times " +
+                "with the next-suggestion shortcut to learn a preferred fix; start the next word to confirm each choice.", Face.Caption, null);
+            Btn forget = new Btn("Forget selected", ButtonKind.Secondary);
             forget.Click += delegate
             {
                 List<string> selected = new List<string>();
@@ -380,37 +653,190 @@ namespace KeyboardWriterHelper
                 foreach (string typed in selected) app.ForgetLearned(typed);
                 Reload();
             };
-            Button clear = new Button();
-            clear.Text = "&Clear all learning";
-            clear.SetBounds(Left0 + 155, 324, 150, 28);
+            Btn clear = new Btn("Clear all learning", ButtonKind.Danger);
             clear.Click += delegate
             {
-                if (MessageBox.Show(this, "Forget all learned words, preferences and feedback counts? " +
-                    "Your manual My words and My fixes lists will be kept.", Text,
-                    MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+                if (!Dialog.Ask(this, "Clear all learning?", "Forget all learned words, preferences and feedback counts? " +
+                    "Your manual My words and My fixes lists will be kept.", null, "Clear all", "Keep")) return;
                 app.ClearPersonalLearning();
                 Reload();
             };
-            learningStatus.SetBounds(Left0, 362, Wide, 44);
-            learningStatus.ForeColor = SystemColors.GrayText;
-            page.Controls.AddRange(new Control[] { learn, help, learningList, forget, clear, learningStatus });
+            page.Header.Add(learnCard);
+            page.Header.Add(help);
+            page.Fill = learningFrame;
+            page.BottomStart.Add(forget);
+            page.BottomEnd.Add(clear);
+            page.Footer.Add(learningStatus);
+            page.Controls.Add(learnCard);
+            page.Controls.Add(help);
+            page.Controls.Add(learningFrame);
+            page.Controls.Add(forget);
+            page.Controls.Add(clear);
+            page.Controls.Add(learningStatus);
             return page;
         }
 
-        TabPage StatsTab()
+        Control DiagnosticsPage()
         {
-            TabPage page = new TabPage("Statistics");
-            statsLabel.SetBounds(Left0, 10, Wide, 230);
-            Button open = new Button();
-            open.Text = "Open the data folder";
-            open.SetBounds(Left0, 250, 170, 27);
-            open.Click += delegate { try { Process.Start(new ProcessStartInfo { FileName = app.DataFolder, UseShellExecute = true }); } catch { } };
-            page.Controls.AddRange(new Control[] {
-                statsLabel, open,
-                Note("The folder holds your settings, My words, My fixes, the program list and these counters. " +
-                     "The lists are plain text: edits made in Notepad are picked up within a second.", 284, 36) });
+            Stack page = NewStack();
+            page.Controls.Add(Heading("What it says", true));
+            page.Controls.Add(diagHint);
+            page.Controls.Add(Heading("Since the app started", false));
+            page.Controls.Add(diagTiles1);
+            diagTiles2.Margin = new Padding(0, 12, 0, 0);
+            page.Controls.Add(diagTiles2);
+            page.Controls.Add(Heading("Keys that were ignored", false));
+            page.Controls.Add(diagIgnored);
+            page.Controls.Add(Heading("Where it runs", false));
+            page.Controls.Add(diagWhere);
+            Btn copy = new Btn("Copy report", ButtonKind.Primary);
+            copy.Margin = new Padding(0, 24, 0, 0);
+            copy.Click += delegate
+            {
+                try { Clipboard.SetText(app.DiagnosticsText()); Dialog.Tell(this, "Report copied", "Paste it into a message. It holds numbers and program names only, never anything you typed."); }
+                catch (Exception) { Dialog.Tell(this, "Could not copy", "Windows would not let the app use the clipboard just now. Try again."); }
+            };
+            Btn log = new Btn("Open error log", ButtonKind.Secondary);
+            log.Click += delegate
+            {
+                string path = app.ErrorLogPath;
+                if (path != null && File.Exists(path)) Open(path);
+                else Dialog.Tell(this, "No errors", "Nothing has gone wrong, so there is no error log yet.");
+            };
+            Btn folder = new Btn("Open the data folder", ButtonKind.Secondary);
+            folder.Click += delegate { Open(app.DataFolder); };
+            page.Controls.Add(new ButtonSlot(copy, log, folder));
+            page.Controls.Add(Note("The report and the error log hold numbers, program names and error messages. Nothing you type is ever recorded."));
             return page;
         }
+
+        // ---- Back up and restore: words, fixes and programs in one text file ----
+
+        void ExportData()
+        {
+            using (SaveFileDialog dialog = new SaveFileDialog())
+            {
+                dialog.Title = "Save my words, fixes and programs";
+                dialog.Filter = "Text file (*.txt)|*.txt";
+                dialog.FileName = "keyboard-writer-helper-backup.txt";
+                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                StringBuilder text = new StringBuilder();
+                text.AppendLine("# Keyboard Writer Helper backup. Load it with Settings > General > Back up > Import.");
+                text.AppendLine("[words]");
+                foreach (string w in app.MyWords.All()) text.AppendLine(w);
+                text.AppendLine("[fixes]");
+                foreach (string f in app.MyFixes.All()) text.AppendLine(f);
+                text.AppendLine("[programs]");
+                foreach (string p in app.ExcludedApps.All()) text.AppendLine(p);
+                text.AppendLine("[careful]");
+                foreach (string p in app.CarefulApps.All()) text.AppendLine(p);
+                try
+                {
+                    File.WriteAllText(dialog.FileName, text.ToString(), new UTF8Encoding(false));
+                    Dialog.Tell(this, "Saved", app.MyWords.All().Length + " words, " + app.MyFixes.All().Length + " fixes and " +
+                        app.ExcludedApps.All().Length + " programs were saved to " + dialog.FileName + ".");
+                }
+                catch (Exception ex) { Dialog.Tell(this, "Could not save", ex.Message); }
+            }
+        }
+
+        void ImportData()
+        {
+            using (OpenFileDialog dialog = new OpenFileDialog())
+            {
+                dialog.Title = "Load words, fixes and programs";
+                dialog.Filter = "Text file (*.txt)|*.txt|All files (*.*)|*.*";
+                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                string[] lines;
+                try { lines = File.ReadAllLines(dialog.FileName); }
+                catch (Exception ex) { Dialog.Tell(this, "Could not read the file", ex.Message); return; }
+                int words = 0, fixes = 0, programs = 0, skipped = 0;
+                string section = "";
+                foreach (string raw in lines)
+                {
+                    string line = raw.Trim();
+                    if (line.Length == 0 || line.StartsWith("#")) continue;
+                    if (line.StartsWith("[") && line.EndsWith("]")) { section = line.Substring(1, line.Length - 2).ToLowerInvariant(); continue; }
+                    if (section == "words") { app.MyWords.Add(line); words++; }
+                    else if (section == "fixes")
+                    {
+                        int eq = line.IndexOf('=');
+                        string typed = eq > 0 ? line.Substring(0, eq).Trim() : "", fix = eq > 0 ? line.Substring(eq + 1).Trim() : "";
+                        if (IsTypable(typed) && fix.Length > 0) { app.AlwaysFix(typed, fix); fixes++; } else skipped++;
+                    }
+                    else if (section == "careful")
+                    {
+                        app.CarefulApps.Add(line.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? line : line + ".exe");
+                        programs++;
+                    }
+                    else if (section == "programs")
+                    {
+                        app.ExcludedApps.Add(line.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? line : line + ".exe");
+                        programs++;
+                    }
+                    else skipped++;
+                }
+                app.MyWords.Sync(); app.MyFixes.Sync(); app.ExcludedApps.Sync(); app.CarefulApps.Sync();
+                Reload();
+                Dialog.Tell(this, "Loaded", words + " words, " + fixes + " fixes and " + programs + " programs were added." +
+                    (skipped > 0 ? "\r\n" + skipped + " lines could not be used and were skipped." : ""));
+            }
+        }
+
+        Control StatsPage()
+        {
+            Stack page = NewStack();
+            page.Controls.Add(Heading("This session", true));
+            page.Controls.Add(sessionTiles);
+            page.Controls.Add(Heading("All time", false));
+            page.Controls.Add(allTimeTiles);
+            page.Controls.Add(Heading("Health", false));
+            page.Controls.Add(healthTiles);
+            healthError.Margin = new Padding(0, 10, 0, 0);
+            page.Controls.Add(healthError);
+            Btn open = new Btn("Open the data folder", ButtonKind.Secondary);
+            open.Margin = new Padding(0, 24, 0, 0);
+            open.Click += delegate { Open(app.DataFolder); };
+            page.Controls.Add(new ButtonSlot(open));
+            page.Controls.Add(Note("The folder holds your settings, My words, My fixes, the program list and these counters. " +
+                "The lists are plain text: edits made in Notepad are picked up within a second."));
+            return page;
+        }
+
+        Control AboutPage()
+        {
+            Stack page = NewStack();
+            page.Controls.Add(new AboutHeader());
+            page.Controls.Add(Heading("Updates", false));
+            Btn check = new Btn("Check now", ButtonKind.Secondary);
+            check.Click += delegate { app.CheckForUpdatesNow(); };
+            page.Controls.Add(Group(
+                Toggle("Check for new versions", "Looks about once a day. You are only told when there is a newer version; otherwise nothing is shown.",
+                    app.Settings.CheckForUpdates, delegate(bool v) { app.Settings.CheckForUpdates = v; app.Settings.Save(); }),
+                new ValueRow("You have version " + Updater.Current(), "Updates are checked against their published checksum before they are installed.", check, 130)));
+            page.Controls.Add(Heading("Privacy", false));
+            page.Controls.Add(new TextBlock("Spelling, grammar and Smart Compose all run on this computer. Nothing you type is uploaded or saved unless you ask for it.", Face.Body, null));
+            page.Controls.Add(Heading("Dictionaries in use", false));
+            page.Controls.Add(new TextBlock(app.Languages, Face.Body, null));
+            page.Controls.Add(Heading("Credits", false));
+            page.Controls.Add(new TextBlock("The built-in word data comes from open projects: Wikipedia's common misspellings, the Birkbeck corpus, " +
+                "Peter Norvig's data, LibreOffice AutoCorrect, the GitHub Typo Corpus, SymSpell, Hunspell and SCOWL, and more. Thank you to everyone who shared them.", Face.Body, null));
+            Btn credits = new Btn("Credits and licences", ButtonKind.Secondary);
+            credits.Click += delegate { Open(Home + "/blob/main/THIRD_PARTY_NOTICES.md"); };
+            Btn project = new Btn("Project on GitHub", ButtonKind.Secondary);
+            project.Click += delegate { Open(Home); };
+            credits.Margin = new Padding(0, 16, 0, 0);
+            page.Controls.Add(new ButtonSlot(credits, project));
+            return page;
+        }
+
+        static void Open(string target)
+        {
+            try { Process.Start(new ProcessStartInfo { FileName = target, UseShellExecute = true }); }
+            catch (Exception) { }
+        }
+
+        // ---- What the pages do ----
 
         bool AddWord(string text)
         {
@@ -428,10 +854,9 @@ namespace KeyboardWriterHelper
             string typed = eq > 0 ? text.Substring(0, eq).Trim() : "", fix = eq > 0 ? text.Substring(eq + 1).Trim() : "";
             if (!IsTypable(typed) || fix.Length == 0)
             {
-                MessageBox.Show(this,
+                Dialog.Tell(this, "That is not a fix yet",
                     "Write it as  typo=correction , for example  brb=be right back .\r\n\r\n" +
-                    "The left side is one to four words, made of letters.",
-                    Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    "The left side is one to four words, made of letters.");
                 return false;
             }
             app.AlwaysFix(typed, fix);
@@ -468,10 +893,17 @@ namespace KeyboardWriterHelper
         // Brings every list and number up to date without disturbing what is selected.
         void Reload()
         {
-            Fill(wordsList, ref shownWords, app.MyWords.All());
-            Fill(appsList, ref shownApps, app.ExcludedApps.All());
-            Fill(fixesList, ref shownFixes, app.MyFixes.All());
-            statsLabel.Text = app.StatsText();
+            Fill(wordsFrame, ref shownWords, app.MyWords.All());
+            Fill(appsFrame, ref shownApps, app.ExcludedApps.All());
+            Fill(carefulFrame, ref shownCareful, app.CarefulApps.All());
+            Fill(fixesFrame, ref shownFixes, app.MyFixes.All());
+
+            string[] numbers = app.StatsNumbers();
+            sessionTiles.SetValues(new string[] { numbers[0], numbers[1], numbers[2] });
+            allTimeTiles.SetValues(new string[] { numbers[3], numbers[4], numbers[5] });
+            healthTiles.SetValues(new string[] { numbers[6], numbers[7], numbers[8] });
+            healthError.Value = app.LastErrorText == null ? "" : "Last error: " + app.LastErrorText;
+            healthError.Visible = app.LastErrorText != null;
 
             learningItems = app.Learning.All();
             string[] learnedLines = new string[learningItems.Length];
@@ -485,18 +917,27 @@ namespace KeyboardWriterHelper
                 learnedLines[i] = entry.Typed + Arrow + action + (entry.IsActive ? "  [learned]" :
                     "  [pending " + entry.Confirmations + "/" + threshold + "]");
             }
-            Fill(learningList, ref shownLearning, learnedLines);
-            learningStatus.Text = app.Learning.LastError ?? (active + " learned, " + (learningItems.Length - active) +
+            Fill(learningFrame, ref shownLearning, learnedLines);
+            learningStatus.Value = app.Learning.LastError ?? (active + " learned, " + (learningItems.Length - active) +
                 " awaiting more feedback. " + (app.Learning.Enabled ? "Learning is on." : "Learning is off; saved entries are inactive.") +
-                "\r\nManual My words and My fixes always take priority.");
+                " Manual My words and My fixes always take priority.");
 
-            bool frequent = frequentTypos.Checked;
-            string[][] items = frequent ? app.TopTypos() : app.RecentCorrections();
+            string[][] items = frequentChosen ? app.TopTypos() : app.RecentCorrections();
             string[] lines = new string[items.Length];
             for (int i = 0; i < items.Length; i++)
-                lines[i] = (frequent ? items[i][2] + " ×   " : "") + items[i][0] + Arrow + items[i][1];
+                lines[i] = (frequentChosen ? items[i][2] + " ×   " : "") + items[i][0] + Arrow + items[i][1];
             typoItems = items;
-            Fill(typosList, ref shownTypos, lines);
+            Fill(typosFrame, ref shownTypos, lines);
+
+            string[] diag = app.DiagnosticsNumbers();
+            diagTiles1.SetValues(new string[] { diag[0], diag[1], diag[2] });
+            diagTiles2.SetValues(new string[] { diag[3], diag[4], diag[5] });
+            diagHint.Value = app.DiagnosticsHint();
+            diagIgnored.Value = app.IgnoredText();
+            diagWhere.Value = app.WhereText();
+
+            if (app.Enabled) status.Set("Auto-correct is on", Theme.Accent);
+            else status.Set("Auto-correct is paused", Theme.Muted);
         }
 
         static bool SequenceEquals(string[] a, string[] b)
@@ -508,10 +949,11 @@ namespace KeyboardWriterHelper
             return true;
         }
 
-        static void Fill(ListBox list, ref string[] shown, string[] now)
+        static void Fill(ListFrame frame, ref string[] shown, string[] now)
         {
-            if (SequenceEquals(shown, now)) return;
+            if (SequenceEquals(shown, now)) { frame.UpdateEmpty(); return; }
             shown = now;
+            ListBox list = frame.List;
             object prevSelected = list.SelectedItem;
             list.BeginUpdate();
             list.Items.Clear();
@@ -522,6 +964,194 @@ namespace KeyboardWriterHelper
                 if (idx >= 0) list.SelectedIndex = idx;
             }
             list.EndUpdate();
+            frame.UpdateEmpty();
+        }
+
+        // ---- Pieces only this window uses ----
+
+        // The logo, the name and the version at the top of the side menu.
+        sealed class BrandView : Surface
+        {
+            public BrandView()
+            {
+                BackColor = Theme.Sidebar;
+                TabStop = false;
+                AccessibleRole = AccessibleRole.StaticText;
+                AccessibleName = TrayApp.AppName + " " + Program.Version;
+            }
+
+            protected override void OnResize(EventArgs e)
+            {
+                base.OnResize(e);
+                if (Height != P(92)) Height = P(92);
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                Graphics g = e.Graphics;
+                g.Clear(Theme.Sidebar);
+                int size = P(40);
+                Theme.DrawLogo(g, new Rectangle(P(24), P(26), size, size), Color.FromArgb(22, 163, 74));
+                int x = P(24) + size + P(12);
+                string shortVersion = Updater.Current();
+                TextRenderer.DrawText(g, "Keyboard Writer", F(Face.BodyStrong), new Rectangle(x, P(24), Width - x - P(8), P(22)), Theme.Text, Theme.OneLine);
+                TextRenderer.DrawText(g, "Helper  " + shortVersion, F(Face.Caption), new Rectangle(x, P(46), Width - x - P(8), P(20)), Theme.Muted, Theme.OneLine);
+            }
+        }
+
+        // The big logo and name on the About page.
+        sealed class AboutHeader : Surface, IFlow
+        {
+            public AboutHeader() { TabStop = false; AccessibleRole = AccessibleRole.StaticText; AccessibleName = TrayApp.AppName + " " + Program.Version + ", made by " + TrayApp.Author; }
+
+            public int Measure(int width) { return P(104); }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                Graphics g = e.Graphics;
+                g.Clear(Theme.Bg);
+                int size = P(72);
+                Theme.DrawLogo(g, new Rectangle(0, P(8), size, size), Color.FromArgb(22, 163, 74));
+                int x = size + P(20);
+                TextRenderer.DrawText(g, TrayApp.AppName, F(Face.Title), new Rectangle(x, P(8), Width - x, P(40)), Theme.Text, Theme.OneLine);
+                TextRenderer.DrawText(g, "Version " + Program.Version, F(Face.Body), new Rectangle(x, P(48), Width - x, P(24)), Theme.Muted, Theme.OneLine);
+                TextRenderer.DrawText(g, "Made by " + TrayApp.Author, F(Face.BodyStrong), new Rectangle(x, P(74), Width - x, P(24)), Theme.Text, Theme.OneLine);
+            }
+        }
+
+        // Buttons in a row, left to right.
+        sealed class ButtonSlot : Panel, IFlow
+        {
+            readonly Btn[] buttons;
+
+            public ButtonSlot(params Btn[] buttons)
+            {
+                this.buttons = buttons;
+                BackColor = Theme.Bg;
+                Padding spacing = buttons.Length > 0 ? buttons[0].Margin : Padding.Empty;
+                foreach (Btn b in buttons) Controls.Add(b);
+                Margin = spacing;
+            }
+
+            // Buttons go on a second row when they do not fit side by side.
+            int Rows(int width)
+            {
+                int gap = Theme.Px(this, 10), x = 0, rows = 1;
+                foreach (Btn b in buttons)
+                {
+                    if (x > 0 && x + b.PreferredWidth > width) { rows++; x = 0; }
+                    x += b.PreferredWidth + gap;
+                }
+                return rows;
+            }
+
+            public int Measure(int width)
+            {
+                int row = Theme.Px(this, 36), gap = Theme.Px(this, 10);
+                return Rows(width) * row + (Rows(width) - 1) * gap;
+            }
+
+            protected override void OnLayout(LayoutEventArgs e)
+            {
+                base.OnLayout(e);
+                int x = 0, y = 0, gap = Theme.Px(this, 10), row = Theme.Px(this, 36);
+                foreach (Btn b in buttons)
+                {
+                    b.Margin = new Padding(0);
+                    if (x > 0 && x + b.PreferredWidth > Width) { x = 0; y += row + gap; }
+                    b.SetBounds(x, y, b.PreferredWidth, row);
+                    x += b.PreferredWidth + gap;
+                }
+            }
+        }
+
+        // A page that is mostly one list: things above it, things below it.
+        sealed class ToolPage : Panel
+        {
+            public Control Fill, TopStretch;
+            // Other lists that take the same place when they are switched in.
+            public readonly List<Control> Alternates = new List<Control>();
+            public readonly List<Control> TopStart = new List<Control>(), TopEnd = new List<Control>();
+            public readonly List<Control> BottomStart = new List<Control>(), BottomEnd = new List<Control>();
+            // Full-width items (cards, paragraphs) above and below.
+            public readonly List<Control> Header = new List<Control>(), Footer = new List<Control>();
+
+            public ToolPage() { BackColor = Theme.Bg; DoubleBuffered = true; }
+
+            int P(int v) { return Theme.Px(this, v); }
+
+            static int Pref(Control c) { Btn b = c as Btn; return b != null ? b.PreferredWidth : c.Width; }
+
+            int FlowHeight(List<Control> items, int width, int gap)
+            {
+                int h = 0;
+                foreach (Control c in items)
+                {
+                    IFlow f = c as IFlow;
+                    h += (f != null ? f.Measure(width) : c.Height) + gap;
+                }
+                return h;
+            }
+
+            int Place(List<Control> items, int y, int width, int gap)
+            {
+                foreach (Control c in items)
+                {
+                    IFlow f = c as IFlow;
+                    int h = f != null ? f.Measure(width) : c.Height;
+                    c.SetBounds(0, y, width, h);
+                    y += h + gap;
+                }
+                return y;
+            }
+
+            protected override void OnLayout(LayoutEventArgs e)
+            {
+                base.OnLayout(e);
+                int w = Width, gap = P(12);
+                int row = P(38);
+                bool top = TopStretch != null || TopStart.Count > 0 || TopEnd.Count > 0;
+                bool bottom = BottomStart.Count > 0 || BottomEnd.Count > 0;
+
+                int y = Place(Header, 0, w, gap);
+                if (top)
+                {
+                    int x = 0;
+                    foreach (Control c in TopStart) { c.SetBounds(x, y + P(1), Pref(c), P(36)); x += Pref(c) + P(8); }
+                    int right = w;
+                    for (int i = TopEnd.Count - 1; i >= 0; i--)
+                    {
+                        Control c = TopEnd[i];
+                        right -= Pref(c);
+                        c.SetBounds(right, y + P(1), Pref(c), P(36));
+                        right -= P(8);
+                    }
+                    if (TopStretch != null) TopStretch.SetBounds(x, y, Math.Max(P(80), right - x + P(8)), row);
+                    y += row + gap;
+                }
+
+                int footerH = FlowHeight(Footer, w, gap);
+                int bottomH = bottom ? P(36) + gap : 0;
+                int fillH = Math.Max(P(80), Height - y - bottomH - footerH);
+                Fill.SetBounds(0, y, w, fillH);
+                foreach (Control other in Alternates) other.SetBounds(0, y, w, fillH);
+                y += fillH + gap;
+                if (bottom)
+                {
+                    int x = 0;
+                    foreach (Control c in BottomStart) { c.SetBounds(x, y, Pref(c), P(36)); x += Pref(c) + P(8); }
+                    int right = w;
+                    for (int i = BottomEnd.Count - 1; i >= 0; i--)
+                    {
+                        Control c = BottomEnd[i];
+                        right -= Pref(c);
+                        c.SetBounds(right, y, Pref(c), P(36));
+                        right -= P(8);
+                    }
+                    y += P(36) + gap;
+                }
+                Place(Footer, y, w, gap);
+            }
         }
     }
 }

@@ -33,6 +33,18 @@ call :run "misspellings that should be fixed" --eval --min-right %MIN_RIGHT% --m
 call :run "correct words that should be left alone" --eval-ok --misses --max-changed %MAX_CHANGED% "%~dp0tests\correct-words.txt"
 call :run "typing cases through the engine" --cases "%~dp0tests\typing-cases.txt" "%~dp0tests\must-not-change.txt" "%~dp0tests\grammar-cases.txt"
 
+echo --- settings window layout ---
+%EXE% --settings-check > %LOG% 2>&1
+set ERR=!ERRORLEVEL!
+type %LOG%
+del %LOG% >nul 2>&1
+if "!ERR!"=="2" (
+    echo [SKIPPED] the window could not be opened here
+) else if not "!ERR!"=="0" (
+    echo [FAIL] the settings window has layout problems
+    set FAILED=1
+)
+
 echo --- end-to-end through the real keyboard hook ---
 if defined KWH_SKIP_SELFTEST (
     echo [SKIPPED] KWH_SKIP_SELFTEST is set

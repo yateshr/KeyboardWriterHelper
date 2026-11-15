@@ -1,0 +1,23 @@
+Keyboard Writer Helper fixes spelling mistakes in any Windows program as you type. When you press Space after a misspelled word, it is replaced with the most likely intended word. Press Backspace right after a fix to undo it.
+
+
+WHAT THIS SETUP DOES
+
+  - Installs the app for your Windows account only. No administrator rights are needed.
+  - Adds a Start menu entry. A desktop icon and "start with Windows" are your choice on a later page.
+  - Keeps your settings, My words and My fixes in %APPDATA%\KeyboardWriterHelper, apart from the program. Updating or reinstalling never touches them.
+  - Can look for a newer version about once a day. It only speaks up when there is one, and it asks before it installs anything.
+
+
+WHAT IT NEVER DOES
+
+  - It never sends what you type anywhere. Spelling, grammar and Smart Compose all run on this PC.
+  - It installs no drivers, no services and no browser add-ons.
+  - It does not change anything outside its own folder, your settings folder, one Start menu entry, and (only if you choose it) one startup entry.
+
+
+BEFORE YOU CONTINUE
+
+If Keyboard Writer Helper is running, close it first: right-click its icon in the system tray and choose Exit. Setup will tell you if it is still open.
+
+The next two pages show what is new in this version and who to thank for the word data.

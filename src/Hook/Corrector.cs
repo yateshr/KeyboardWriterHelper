@@ -61,6 +61,8 @@ namespace KeyboardWriterHelper
         IntPtr keyHook, mouseHook, lastForeground;
         uint threadId;
         Exception startupError;
+        // Programs where only clear spelling mistakes are fixed; null when there is no such list.
+        readonly ListFile carefulApps;
         volatile bool enabled = true;
         volatile string lastApp = "";
         bool wasEnabled = true;
@@ -98,8 +100,9 @@ namespace KeyboardWriterHelper
         public string LastApp { get { return lastApp; } }
 
         public Corrector(SpellService spelling, ListFile myWords, ListFile myFixes, ListFile excludedApps,
-            Counters counters, Settings settings, IntPtr testMarker, PersonalLearning learning = null)
+            Counters counters, Settings settings, IntPtr testMarker, PersonalLearning learning = null, ListFile carefulApps = null)
         {
+            this.carefulApps = carefulApps;
             this.settings = settings;
             this.spelling = spelling;
             this.myWords = myWords;
@@ -448,6 +451,19 @@ namespace KeyboardWriterHelper
                 lastApp = Native.ProcessNameOf(foreground);
                 fullScreenCheckedAt = null;
                 engine.Break(true);
+            }
+            // A careful program: spelling only, on Space. No phrases, capitals, symbols or guesses.
+            if (carefulApps != null && lastApp.Length > 0 && carefulApps.Contains(lastApp))
+            {
+                engine.FixOnPunctuation = false;
+                engine.CapitalizeSentences = false;
+                engine.FixTwoCapitals = false;
+                engine.FixPhrases = false;
+                engine.DoubleSpacePeriod = false;
+                engine.SmartDashes = false;
+                engine.SmartArrows = false;
+                engine.SmartEllipsis = false;
+                engine.SmartCompose = false;
             }
 
             string skipReason = repeat ? null :

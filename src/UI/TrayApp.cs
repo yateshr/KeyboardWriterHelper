@@ -24,6 +24,7 @@ namespace KeyboardWriterHelper
     sealed class TrayApp : ApplicationContext
     {
         public const string AppName = "Keyboard Writer Helper";
+        public const string Author = "YATESH ROHIT";
         const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
         const string RunValue = "KeyboardWriterHelper";
         const int MaxTrayText = 63; // NotifyIcon.Text throws beyond this
@@ -34,7 +35,7 @@ namespace KeyboardWriterHelper
         readonly Icon iconOn, iconOff, iconSkipped;
         readonly Counters counters = new Counters();
         readonly Settings settings;
-        readonly ListFile myWords, myFixes, excludedApps;
+        readonly ListFile myWords, myFixes, excludedApps, carefulApps;
         readonly PersonalLearning learning;
         readonly TypoLog typos;
         readonly SpellService spelling;
@@ -62,6 +63,7 @@ namespace KeyboardWriterHelper
         {
             this.folder = folder;
             Directory.CreateDirectory(folder);
+            ErrorLog.Init(folder);
             statsPath = Path.Combine(folder, "stats.txt");
             lifetimePath = Path.Combine(folder, "lifetime.txt");
             ownExe = Path.GetFileName(Application.ExecutablePath);
@@ -71,6 +73,7 @@ namespace KeyboardWriterHelper
             myWords = ListFile.MyWords(folder);
             myFixes = ListFile.MyFixes(folder);
             excludedApps = ListFile.ExcludedApps(folder);
+            carefulApps = ListFile.CarefulApps(folder);
             learning = new PersonalLearning(Path.Combine(folder, "personal-learning.txt"), settings.LearnPersonalVocabulary);
             typos = new TypoLog(Path.Combine(folder, "typo-counts.txt"), settings.RememberTypos);
             LoadLifetime();
@@ -105,6 +108,12 @@ namespace KeyboardWriterHelper
                 title, errorItem, statsItem, new ToolStripSeparator(), enabledItem, pauseItem, appItem, recentItem,
                 new ToolStripSeparator(), settingsItem, startupItem, updateItem,
                 new ToolStripSeparator(), exitItem });
+            Theme.Load();
+            menu.Renderer = new MenuRenderer();
+            menu.Font = Theme.Get(Face.Body, 96);
+            menu.BackColor = Theme.Card;
+            menu.ForeColor = Theme.Text;
+            menu.Padding = new Padding(0, 4, 0, 4);
             menu.Opening += delegate { RefreshMenu(); };
 
             tray = new NotifyIcon();
@@ -115,19 +124,19 @@ namespace KeyboardWriterHelper
             candidatePopup = new CandidatePopup();
 
             IntPtr forceHandle = ui.Handle;
-            corrector = new Corrector(spelling, myWords, myFixes, excludedApps, counters, settings, IntPtr.Zero, learning);
+            corrector = new Corrector(spelling, myWords, myFixes, excludedApps, counters, settings, IntPtr.Zero, learning, carefulApps);
             corrector.Corrected += OnCorrected;
             corrector.Undone += delegate(string typed, string fix) { typos.Count(typed, fix, -1); };
             corrector.Changed += OnChanged;
             corrector.CandidateOffered += delegate(string fix, string[] choices)
             {
-                if (settings.ShowCandidatePopup) OnUi(delegate { candidatePopup.ShowCandidates(fix, choices, Native.GetForegroundWindow()); });
+                if (settings.ShowCandidatePopup && !carefulApps.Contains(corrector.LastApp)) OnUi(delegate { candidatePopup.Corner = settings.PopupCorner; candidatePopup.ShowCandidates(fix, choices, Native.GetForegroundWindow()); });
             };
             corrector.CandidateDismissed += delegate { OnUi(candidatePopup.Dismiss); };
             corrector.PredictionOffered += delegate(string pred, string pfx)
             {
                 if (settings.SmartCompose && settings.ShowCandidatePopup)
-                    OnUi(delegate { candidatePopup.ShowPrediction(pred, pfx, Native.GetForegroundWindow()); });
+                    OnUi(delegate { candidatePopup.Corner = settings.PopupCorner; candidatePopup.ShowPrediction(pred, pfx, Native.GetForegroundWindow()); });
             };
             corrector.PredictionDismissed += delegate { OnUi(candidatePopup.Dismiss); };
             corrector.Learned += delegate(string word)
@@ -146,11 +155,8 @@ namespace KeyboardWriterHelper
             housekeeping.Interval = 1000;
             housekeeping.Tick += delegate { Housekeeping(); };
             housekeeping.Start();
-            // Once, not at every sign-in.
-            if (firstRun)
-                tray.ShowBalloonTip(6000, AppName,
-                    "Running. Misspelled words are fixed when you press Space. Press Backspace right after a fix to undo it.",
-                    ToolTipIcon.Info);
+            // Once, not at every sign-in: a short welcome, a moment after start.
+            if (firstRun) welcomeAt = DateTime.UtcNow.AddSeconds(2);
             AppDomain.CurrentDomain.ProcessExit += delegate { DisposeResources(); };
             AppDomain.CurrentDomain.UnhandledException += delegate { DisposeResources(); };
             Application.ApplicationExit += delegate { DisposeResources(); };
@@ -184,6 +190,7 @@ namespace KeyboardWriterHelper
                 if (myWords != null) myWords.Sync();
                 if (myFixes != null) myFixes.Sync();
                 if (excludedApps != null) excludedApps.Sync();
+                if (carefulApps != null) carefulApps.Sync();
                 if (learning != null) learning.Save();
                 if (settings != null) settings.Save();
                 if (settings != null && settings.RememberTypos && typos != null) typos.Save();
@@ -216,6 +223,7 @@ namespace KeyboardWriterHelper
         public ListFile MyWords { get { return myWords; } }
         public ListFile MyFixes { get { return myFixes; } }
         public ListFile ExcludedApps { get { return excludedApps; } }
+        public ListFile CarefulApps { get { return carefulApps; } }
         public PersonalLearning Learning { get { return learning; } }
         public string CurrentApp { get { return currentApp; } }
         public string DataFolder { get { return folder; } }
@@ -297,6 +305,80 @@ namespace KeyboardWriterHelper
             learning.Clear();
             learning.Save();
         }
+
+        // The numbers behind the statistics page, formatted: this session (words,
+        // corrections, undone), all time (words, corrections, share undone), health
+        // (slowest key in ms, slow lookups, errors).
+        public string[] StatsNumbers()
+        {
+            long words = baseWords + counters.Words, fixes = baseCorrections + counters.Corrections, undone = baseUndone + counters.Undone;
+            return new string[] {
+                counters.Words.ToString("N0"), counters.Corrections.ToString("N0"), counters.Undone.ToString("N0"),
+                words.ToString("N0"), fixes.ToString("N0"), Share(undone, fixes),
+                counters.SlowestKeyMs.ToString("N0"), counters.TooSlow.ToString("N0"), counters.Errors.ToString("N0") };
+        }
+
+        // For the tests: the settings window's layout problems, one per line (empty = fine).
+        public string[] CheckSettingsLayout()
+        {
+            welcomeAt = DateTime.MinValue;
+            nextUpdateCheck = DateTime.MaxValue;
+            SettingsForm form = new SettingsForm(this);
+            try { return form.CheckLayout().ToArray(); }
+            finally { form.Close(); }
+        }
+
+        public void SaveSettingsShots(string folder)
+        {
+            welcomeAt = DateTime.MinValue;
+            nextUpdateCheck = DateTime.MaxValue;
+            Directory.CreateDirectory(folder);
+            SettingsForm form = new SettingsForm(this);
+            form.Show();
+            form.SaveShots(folder);
+            form.Close();
+            ContextMenuStrip menu = tray.ContextMenuStrip;
+            RefreshMenu();
+            menu.Show(new Point(80, 80));
+            for (int k = 0; k < 5; k++) { Application.DoEvents(); Thread.Sleep(40); }
+            using (Bitmap bmp = new Bitmap(menu.Width, menu.Height))
+            {
+                menu.DrawToBitmap(bmp, new Rectangle(0, 0, menu.Width, menu.Height));
+                bmp.Save(Path.Combine(folder, "tray-menu.png"), System.Drawing.Imaging.ImageFormat.Png);
+            }
+            menu.Close();
+            using (CandidatePopup popup = new CandidatePopup())
+            {
+                popup.ShowCandidates("there's", new string[] { "there's", "theirs", "there" }, IntPtr.Zero);
+                for (int k = 0; k < 5; k++) { Application.DoEvents(); Thread.Sleep(40); }
+                using (Bitmap bmp = new Bitmap(popup.Width, popup.Height))
+                {
+                    popup.DrawToBitmap(bmp, new Rectangle(0, 0, popup.Width, popup.Height));
+                    bmp.Save(Path.Combine(folder, "popup-fix.png"), System.Drawing.Imaging.ImageFormat.Png);
+                }
+                popup.ShowPrediction("something", "som", IntPtr.Zero);
+                for (int k = 0; k < 5; k++) { Application.DoEvents(); Thread.Sleep(40); }
+                using (Bitmap bmp = new Bitmap(popup.Width, popup.Height))
+                {
+                    popup.DrawToBitmap(bmp, new Rectangle(0, 0, popup.Width, popup.Height));
+                    bmp.Save(Path.Combine(folder, "popup-prediction.png"), System.Drawing.Imaging.ImageFormat.Png);
+                }
+            }
+            using (DialogForm dialog = new DialogForm("Version 2.2 is available", "You have 2.1. The app restarts by itself after the update.",
+                "- New look. The settings window is redesigned.\r\n- Light and dark, following Windows.\r\n- Fixed resrat becoming resort.", "Update now", "Later"))
+            {
+                dialog.Show();
+                for (int k = 0; k < 5; k++) { Application.DoEvents(); Thread.Sleep(40); }
+                using (Bitmap bmp = new Bitmap(dialog.Width, dialog.Height))
+                {
+                    dialog.DrawToBitmap(bmp, new Rectangle(0, 0, dialog.Width, dialog.Height));
+                    bmp.Save(Path.Combine(folder, "dialog-update.png"), System.Drawing.Imaging.ImageFormat.Png);
+                }
+            }        }
+
+        public string LastErrorText { get { return counters.LastError; } }
+
+        public void CheckForUpdatesNow() { OnUpdateItem(); }
 
         public string StatsText()
         {
@@ -386,6 +468,7 @@ namespace KeyboardWriterHelper
             if (nowSkipped) excludedApps.Add(app);
             else excludedApps.Remove(app);
             excludedApps.Sync();
+            carefulApps.Sync();
             ShowState();
             Say(nowSkipped ? "Auto-correct is OFF in " + app + "." : "Auto-correct is ON in " + app + ".");
         }
@@ -443,9 +526,8 @@ namespace KeyboardWriterHelper
                     }
                     else if (asked)
                     {
-                        MessageBox.Show(failure == null ? "You have the latest version (" + Updater.Current() + ")."
-                            : "Could not check for updates: " + failure, AppName, MessageBoxButtons.OK,
-                            failure == null ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+                        if (failure == null) Dialog.Tell(null, "You have the latest version", "Version " + Updater.Current() + " is the newest one.");
+                        else Dialog.Tell(null, "Could not check for updates", failure);
                     }
                 });
             });
@@ -463,9 +545,11 @@ namespace KeyboardWriterHelper
         {
             UpdateInfo info = pendingUpdate;
             if (info == null || installingUpdate) return;
-            string notes = string.IsNullOrEmpty(info.Notes) ? "" : "\r\n\r\n" + (info.Notes.Length > 700 ? info.Notes.Substring(0, 700) + "..." : info.Notes).Replace("\n", "\r\n");
-            if (MessageBox.Show("Version " + info.Version + " is available (you have " + Updater.Current() + ")." + notes +
-                "\r\n\r\nUpdate now? The app restarts by itself.", AppName, MessageBoxButtons.YesNo, MessageBoxIcon.Information) != DialogResult.Yes)
+            // The release notes are Markdown; show them as plain text.
+            string notes = string.IsNullOrEmpty(info.Notes) ? null :
+                (info.Notes.Length > 700 ? info.Notes.Substring(0, 700) + "..." : info.Notes).Replace("**", "").Replace("`", "");
+            if (!Dialog.Ask(null, "Version " + info.Version + " is available",
+                "You have " + Updater.Current() + ". The app restarts by itself after the update.", notes, "Update now", "Later"))
                 return;
             installingUpdate = true;
             Say("Downloading version " + info.Version + "...");
@@ -478,13 +562,13 @@ namespace KeyboardWriterHelper
                     installingUpdate = false;
                     if (error != null)
                     {
-                        MessageBox.Show("The update was not installed: " + error, AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        Dialog.Tell(null, "The update was not installed", error);
                         return;
                     }
                     try { Updater.Restart(exe); }
                     catch (Exception ex)
                     {
-                        MessageBox.Show("Updated, but the new version did not start: " + ex.Message + "\r\nStart it from " + exe, AppName);
+                        Dialog.Tell(null, "Updated, but the new version did not start", ex.Message + "\r\nStart it from " + exe);
                         return;
                     }
                     ExitThread();
@@ -494,8 +578,94 @@ namespace KeyboardWriterHelper
             worker.Start();
         }
 
+        // The first-run welcome: when to show it (MinValue = nothing to show).
+        DateTime welcomeAt = DateTime.MinValue;
+
+        void ShowWelcome()
+        {
+            if (Dialog.Ask(null, "Welcome to " + AppName,
+                "It is running in the system tray, next to the clock. Type as usual: a misspelled word is fixed when you press Space, " +
+                "and Backspace right after a fix undoes it. Ctrl+Alt+K pauses and resumes it.\r\n\r\n" +
+                "The suggestion bar shows the other possible words in a corner of the screen; you can choose which corner in Settings.",
+                null, "Open settings", "Got it"))
+                ShowSettings();
+        }
+
+        // ---- Diagnostics: is it working, and if not, why ----
+
+        // Keys seen, words checked, corrections, hook put back, errors, slowest key (ms).
+        public string[] DiagnosticsNumbers()
+        {
+            return new string[] {
+                counters.Keys.ToString("N0"), counters.Words.ToString("N0"), counters.Corrections.ToString("N0"),
+                counters.HookReinstalls.ToString("N0"), counters.Errors.ToString("N0"), counters.SlowestKeyMs.ToString("N0") };
+        }
+
+        // What to look at first.
+        public string DiagnosticsHint()
+        {
+            if (!corrector.Enabled) return "Auto-correct is paused, so nothing is being corrected. Turn it on in General, or press the pause shortcut.";
+            if (counters.Keys == 0 && DateTime.Now - startedAt > TimeSpan.FromSeconds(45))
+                return "No key has reached the app yet. Type something in any program. If this stays at 0, something is blocking the keyboard: " +
+                       "a program running as administrator, remote-desktop or security software. Copy the report and send it with your question.";
+            if (counters.Keys > 0 && counters.Words == 0)
+                return "Keys are arriving but no word has been checked yet. Finish a word with Space.";
+            if (counters.Errors > 0) return "Some errors were caught. Open the error log for details; the app kept running.";
+            return "Everything looks normal. If a word was not corrected, it may be a real word (those are left alone on purpose), " +
+                   "or the program in front is in the Programs list.";
+        }
+
+        // The programs whose keys were ignored, and why. No typed text.
+        public string IgnoredText()
+        {
+            string[] lines = counters.SkippedLines();
+            return lines.Length == 0 ? "Nothing was ignored." : string.Join("\r\n", lines);
+        }
+
+        public string WhereText()
+        {
+            bool admin = false;
+            try { admin = new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator); }
+            catch (Exception) { }
+            return "Windows " + Environment.OSVersion.Version + (Environment.Is64BitOperatingSystem ? " (64-bit)" : "") + "\r\n" +
+                   "Runs as administrator: " + (admin ? "yes" : "no") + ". A program running as administrator does not send its keys to this app unless this app is too.\r\n" +
+                   "Last program typed in: " + (corrector.LastApp.Length > 0 ? corrector.LastApp : "none yet") + "\r\n" +
+                   "Dictionaries: " + spelling.Languages;
+        }
+
+        // The whole report, for pasting into a message. Numbers and names only.
+        public string DiagnosticsText()
+        {
+            string[] n = DiagnosticsNumbers();
+            StringBuilder s = new StringBuilder();
+            s.AppendLine(AppName + " " + Program.Version);
+            s.AppendLine("Started: " + startedAt.ToString("yyyy-MM-dd HH:mm:ss") + "   Auto-correct: " + (corrector.Enabled ? "on" : "paused"));
+            s.AppendLine(WhereText());
+            s.AppendLine();
+            s.AppendLine("Keys seen: " + n[0] + "   Words checked: " + n[1] + "   Corrections: " + n[2]);
+            s.AppendLine("Keyboard hook put back: " + n[3] + "   Errors: " + n[4] + "   Slowest key (ms): " + n[5]);
+            if (counters.LastError != null) s.AppendLine("Last error: " + counters.LastError);
+            s.AppendLine();
+            s.AppendLine("Keys ignored (program: reason = count):");
+            s.AppendLine(IgnoredText());
+            s.AppendLine();
+            s.AppendLine("Settings: fixOnPunctuation=" + settings.FixOnPunctuation + " capitalize=" + settings.CapitalizeSentences +
+                " phrases=" + settings.FixPhrases + " context=" + settings.UseContext + " skipFullscreen=" + settings.SkipFullscreenGames +
+                " popup=" + settings.ShowCandidatePopup + " corner=" + settings.PopupCorner + " compose=" + settings.SmartCompose +
+                " updates=" + settings.CheckForUpdates + " layout=" + settings.KeyboardLayout + " language=" + settings.MainLanguage);
+            s.AppendLine("Lists: " + myWords.All().Length + " words, " + myFixes.All().Length + " fixes, " + excludedApps.All().Length + " never-correct programs, " + carefulApps.All().Length + " careful programs");
+            return s.ToString();
+        }
+
+        public string ErrorLogPath { get { return ErrorLog.Path; } }
+
         void Housekeeping()
         {
+            if (welcomeAt != DateTime.MinValue && DateTime.UtcNow >= welcomeAt)
+            {
+                welcomeAt = DateTime.MinValue;
+                ShowWelcome();
+            }
             if (settings.CheckForUpdates && DateTime.UtcNow >= nextUpdateCheck)
             {
                 nextUpdateCheck = DateTime.UtcNow.AddHours(24);
@@ -661,30 +831,11 @@ namespace KeyboardWriterHelper
         {
             using (Bitmap bmp = new Bitmap(32, 32))
             {
+                // The same logo as everywhere else, in the colour that shows the state.
                 using (Graphics g = Graphics.FromImage(bmp))
-                // The logo in assets/: a rounded square, "Aa" and a check mark,
-                // in the colour that shows the state.
-                using (GraphicsPath shape = new GraphicsPath())
-                using (LinearGradientBrush fill = new LinearGradientBrush(new Point(0, 0), new Point(32, 32),
-                    Color.FromArgb(Math.Min(255, back.R + 14), Math.Min(255, back.G + 34), Math.Min(255, back.B + 17)), back))
-                using (Font font = new Font("Segoe UI", 13.5f, FontStyle.Bold, GraphicsUnit.Pixel))
-                using (Pen check = new Pen(Color.White, 2f))
-                using (StringFormat center = new StringFormat())
                 {
-                    g.SmoothingMode = SmoothingMode.AntiAlias;
-                    g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
-                    shape.AddArc(0, 0, 14, 14, 180, 90);
-                    shape.AddArc(17, 0, 14, 14, 270, 90);
-                    shape.AddArc(17, 17, 14, 14, 0, 90);
-                    shape.AddArc(0, 17, 14, 14, 90, 90);
-                    shape.CloseFigure();
-                    g.FillPath(fill, shape);
-                    center.Alignment = StringAlignment.Center;
-                    center.LineAlignment = StringAlignment.Center;
-                    g.DrawString("Aa", font, Brushes.White, new RectangleF(0, -2, 32, 28), center);
-                    check.StartCap = check.EndCap = LineCap.Round;
-                    check.LineJoin = LineJoin.Round;
-                    g.DrawLines(check, new PointF[] { new PointF(9.5f, 25f), new PointF(13f, 27.5f), new PointF(22f, 23f) });
+                    g.Clear(Color.Transparent);
+                    Theme.DrawLogo(g, new Rectangle(0, 0, 32, 32), back);
                 }
                 IntPtr hIcon = bmp.GetHicon();
                 try

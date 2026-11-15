@@ -94,6 +94,8 @@ namespace KeyboardWriterHelper
         // The English spelling that supplies the suggestions ("" = the first one installed).
         public volatile string MainLanguage = "";
         public volatile string KeyboardLayout = "Auto";
+        // Where the suggestion bar appears: BottomLeft, BottomRight, TopLeft or TopRight.
+        public volatile string PopupCorner = "BottomLeft";
 
         // path = null keeps the defaults and saves nothing (the self-test).
         public Settings(string path)
@@ -126,6 +128,7 @@ namespace KeyboardWriterHelper
                     else if (key == "checkForUpdates") CheckForUpdates = value;
                     else if (key == "mainLanguage") MainLanguage = text;
                     else if (key == "keyboardLayout") KeyboardLayout = text;
+                    else if (key == "popupCorner") PopupCorner = text;
                     else if (key == "pauseHotkey") PauseHotkey = Hotkey.Parse(text) ?? PauseHotkey;
                     else if (key == "nextHotkey") NextHotkey = Hotkey.Parse(text) ?? NextHotkey;
                 }
@@ -201,6 +204,7 @@ namespace KeyboardWriterHelper
                     "checkForUpdates=" + Text(CheckForUpdates) +
                     "mainLanguage=" + MainLanguage + "\r\n" +
                     "keyboardLayout=" + KeyboardLayout + "\r\n" +
+                    "popupCorner=" + PopupCorner + "\r\n" +
                     "pauseHotkey=" + PauseHotkey + "\r\n" +
                     "nextHotkey=" + NextHotkey + "\r\n");
             }
@@ -380,6 +384,14 @@ namespace KeyboardWriterHelper
             return new ListFile(Path.Combine(folder, "my-fixes.txt"),
                 "# Your own fixes and shortcuts, one per line:  typo=correction\r\n" +
                 "# The left side is one to four words (\"could of been=could have been\").", new string[0], true);
+        }
+
+        // Programs where only clear spelling mistakes are fixed (Settings > Programs > Careful).
+        public static ListFile CarefulApps(string folder)
+        {
+            return new ListFile(Path.Combine(folder, "careful-apps.txt"),
+                "# One program per line. In these only clear spelling mistakes are fixed, when Space is pressed:\r\n" +
+                "# no grammar or phrase changes, no capital letters, no symbols, no suggestions.", new string[0], false);
         }
 
         // Starts as data\excluded-apps.txt; from then on the list is the user's.

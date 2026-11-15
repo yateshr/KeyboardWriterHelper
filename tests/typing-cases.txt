@@ -366,6 +366,7 @@
 "It dehaves the same " => "It behaves the same "
 "Whats different. " => "What's different. "
 "lolz that is funny " => "lolz that is funny "
+"replaces itself and resrat. " => "replaces itself and restart. "
 
 # ---- broader built-in fixes ----
 "whats up " => "what's up "
@@ -379,3 +380,8 @@
 "I cleaned the windows " => "I cleaned the windows "
 "the windows are open " => "the windows are open "
 "We behave well " => "We behave well "
+
+# ---- Hindi in English letters is left alone ----
+"kya bhai bilkul sahi bola " => "kya bhai bilkul sahi bola "
+"mujhe pareshani hai aaj " => "mujhe pareshani hai aaj "
+"bhaiya shaadi ki tyohar mast hai " => "bhaiya shaadi ki tyohar mast hai "

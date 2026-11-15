@@ -2,6 +2,45 @@
 
 Newest first. Versions 1.1 to 1.10, then 2.1, 2.2... (see `version.txt`).
 
+## 2.2
+
+- **New look.** The settings window is redesigned: a side menu (General, Corrections,
+  My words, My fixes, Programs, Typos, Learning, Statistics, About), cards with on/off
+  switches and a short explanation under each setting, big-number statistics, and
+  proper type (Segoe UI and Semibold in a fixed scale that follows Windows display scaling).
+- Light and dark, following the Windows app setting, including the title bar, scrollbars,
+  lists, drop-downs and the tray menu. The window can be resized.
+- **The suggestion bar now appears in the bottom-left corner** of the screen (it was top-right).
+- The suggestion bar and every message (update available, update
+  problems, confirmations) use the same colours and type, instead of the grey Windows boxes.
+- **New logo**: a green keycap with an A and a check badge, drawn from shapes so it is sharp at every size.
+  Used for the app icon, the tray icon (green, grey or amber), the settings window and the installer.
+- **Settings > Diagnostics**: whether the app is seeing your keys, which programs were skipped and why,
+  where it runs (including "runs as administrator"), and a **Copy report** button for bug reports. It holds
+  numbers and program names only. Errors the app caught are also written to an error log you can open there.
+- **Careful programs** (Settings > Programs): in the programs you list, only clear spelling mistakes are fixed,
+  when you press Space: no grammar or phrase changes, no capitals, no symbols, no suggestion bar.
+- **Where the suggestion bar appears** is a setting: bottom left (the new default), bottom right, top left or top right.
+- **Back up**: save My words, My fixes and your program lists to one text file, and load them on another PC.
+- A short **welcome** the first time it runs, instead of a balloon that disappears.
+- More Hindi words typed in English letters are left alone.
+- The settings window has an automatic **layout test** (every page at three window sizes). It found and fixed
+  buttons running past the edge, a sideways scrollbar, and a side menu that did not fit a small window.
+- **Licence**: PolyForm Noncommercial 1.0.0. Free for personal and non-commercial use with credit and a link to
+  the repository; no commercial use. Contributing guide, issue templates and a release checklist are new too.
+- Packaging for **winget** and **Scoop** can be generated from a release (`packaging\make-manifests.ps1`), and the
+  release workflow signs the exe and the installer when a certificate is added as a repository secret.
+- About shows who made the app.
+- **Installer.** There are now two downloads: the portable exe as before, and a setup
+  (`KeyboardWriterHelper-Setup-<version>.exe`) with a welcome picture, a "before you install"
+  page, what is new, credits and "made by", a "you are all set" page, and a joke at the end.
+  It installs for your account only (no administrator), adds a Start menu entry, optionally starts
+  with Windows, and uninstalls cleanly from Windows Settings, asking whether to keep your settings.
+  The built-in updater keeps working on an installed copy.
+- Fully usable from the keyboard (Tab, arrow keys in the side menu, Space on switches).
+- New About page: version, update check, privacy and credits.
+- Fixed `resrat` becoming `resort` instead of `restart`.
+
 ## 2.1
 
 - **Automatic updates.** Half a minute after start, and then once a day, the app looks at the

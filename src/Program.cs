@@ -38,6 +38,33 @@ namespace KeyboardWriterHelper
                 Out().WriteLine(TrayApp.AppName + " " + Version);
                 return 0;
             }
+            if (args.Length == 2 && args[0] == "--settings-shot")
+            {
+                // Draws every page of the settings window to PNG files (a way to look at the design).
+                Application.EnableVisualStyles();
+                string temp = Path.Combine(Path.GetTempPath(), "kwh-shot-" + Guid.NewGuid().ToString("N"));
+                TrayApp shotApp = new TrayApp(temp);
+                shotApp.SaveSettingsShots(args[1]);
+                return 0;
+            }
+            if (args.Length == 1 && args[0] == "--settings-check")
+            {
+                // Safety net: a test must never wait for a click that nobody will make.
+                System.Threading.Timer giveUp = new System.Threading.Timer(delegate { Environment.Exit(2); }, null, 60000, Timeout.Infinite);
+                // Opens every settings page at three sizes and says what does not fit.
+                Application.EnableVisualStyles();
+                string temp = Path.Combine(Path.GetTempPath(), "kwh-check-" + Guid.NewGuid().ToString("N"));
+                TextWriter o = Out();
+                try
+                {
+                    string[] problems = new TrayApp(temp).CheckSettingsLayout();
+                    foreach (string problem in problems) o.WriteLine(problem);
+                    o.WriteLine(problems.Length == 0 ? "settings window layout: ok" : problems.Length + " layout problems");
+                    return problems.Length == 0 ? 0 : 1;
+                }
+                catch (Exception ex) { o.WriteLine("could not open the window here: " + ex.Message); return 2; }
+            }
+            if (args.Length >= 5 && args[0] == "--wizard-art") return WizardArt.Run(args);
             if (args.Length >= 1 && args[0] == "--update-check")
             {
                 // Prints whether a newer release exists; with "--install <exe>" also swaps that file for it (a test).
@@ -85,8 +112,7 @@ namespace KeyboardWriterHelper
             {
                 if (!first)
                 {
-                    MessageBox.Show(TrayApp.AppName + " is already running (look in the system tray).",
-                        TrayApp.AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    Dialog.Tell(null, TrayApp.AppName + " is already running", "Look for its icon in the system tray, next to the clock.");
                     return 0;
                 }
                 Application.EnableVisualStyles();
