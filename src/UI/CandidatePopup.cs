@@ -23,15 +23,14 @@ namespace KeyboardWriterHelper
         string predictionWord = "";
         string predictionPrefix = "";
 
-        // Text size in pixels at 96 DPI (9.5 pt), and the size of a 1080 p screen.
-        const float BaseFontPixels = 12.67f;
+        // The size of a 1080 p screen. The type is the app's body text (Theme.cs).
         const int ReferenceHeight = 1080;
         // A big screen without Windows scaling still gets a bigger bar, but never
         // more than this many times the normal size.
         const double MaxSizeFactor = 2.5;
 
         double scale = 1.0;
-        Font popupFont;
+        Font popupFont, strongFont;
 
         [DllImport("user32.dll")] static extern IntPtr MonitorFromPoint(Point pt, uint flags);
         [DllImport("shcore.dll")] static extern int GetDpiForMonitor(IntPtr monitor, int type, out uint dpiX, out uint dpiY);
@@ -59,8 +58,9 @@ namespace KeyboardWriterHelper
             // The size is set here, once for each time it is shown, and never by
             // WinForms' own scaling when the window lands on another screen.
             AutoScaleMode = AutoScaleMode.None;
-            BackColor = Color.FromArgb(32, 34, 38);
-            ForeColor = Color.White;
+            Theme.Load();
+            BackColor = Theme.Card;
+            ForeColor = Theme.Text;
             AccessibleName = "Word Suggestions";
             AccessibleRole = AccessibleRole.ToolTip;
             ApplyScale(1.0);
@@ -71,11 +71,8 @@ namespace KeyboardWriterHelper
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing)
-            {
-                hideTimer.Dispose();
-                if (popupFont != null) popupFont.Dispose();
-            }
+            // The fonts are shared with the rest of the app (Theme.Get), so not disposed here.
+            if (disposing) hideTimer.Dispose();
             base.Dispose(disposing);
         }
 
@@ -85,10 +82,10 @@ namespace KeyboardWriterHelper
         {
             if (popupFont != null && Math.Abs(newScale - scale) < 0.01) return;
             scale = newScale;
-            Font old = popupFont;
-            popupFont = new Font("Segoe UI", (float)(BaseFontPixels * scale), FontStyle.Regular, GraphicsUnit.Pixel);
+            int dpi = Math.Max(48, (int)Math.Round(96 * scale));
+            popupFont = Theme.Get(Face.Body, dpi);
+            strongFont = Theme.Get(Face.BodyStrong, dpi);
             Font = popupFont;
-            if (old != null) old.Dispose();
             Height = Math.Max(S(36), popupFont.Height + S(16));
         }
 
@@ -112,6 +109,15 @@ namespace KeyboardWriterHelper
             return dpiScale * sizeFactor;
         }
 
+        // Light or dark follows Windows; looked at again each time the bar appears.
+        void RefreshTheme()
+        {
+            if (Visible) return;
+            Theme.Load();
+            BackColor = Theme.Card;
+            ForeColor = Theme.Text;
+        }
+
         Screen TargetScreen(IntPtr foreground)
         {
             try { return foreground != IntPtr.Zero ? Screen.FromHandle(foreground) : Screen.FromPoint(Cursor.Position); }
@@ -121,6 +127,7 @@ namespace KeyboardWriterHelper
         public void ShowCandidates(string fix, string[] choices, IntPtr foreground)
         {
             if (choices == null || choices.Length == 0) { Hide(); return; }
+            RefreshTheme();
             Screen screen = TargetScreen(foreground);
             ApplyScale(ScaleFor(screen));
             isPredictionMode = false;
@@ -134,7 +141,7 @@ namespace KeyboardWriterHelper
             using (Graphics g = CreateGraphics())
             {
                 for (int i = 0; i < choices.Length; i++)
-                    width += (int)g.MeasureString((i + 1) + ". " + choices[i], popupFont).Width + S(16);
+                    width += (int)g.MeasureString((i + 1) + ". " + choices[i], strongFont).Width + S(16);
             }
             width += S(40);
             int maxWidth = Math.Min(S(600), (int)(screen.WorkingArea.Width * 0.6));
@@ -144,6 +151,7 @@ namespace KeyboardWriterHelper
         public void ShowPrediction(string prediction, string prefix, IntPtr foreground)
         {
             if (string.IsNullOrEmpty(prediction)) { Dismiss(); return; }
+            RefreshTheme();
             Screen screen = TargetScreen(foreground);
             ApplyScale(ScaleFor(screen));
             isPredictionMode = true;
@@ -190,9 +198,9 @@ namespace KeyboardWriterHelper
 
             using (GraphicsPath path = RoundedRect(new Rectangle(0, 0, Width - 1, Height - 1), S(6)))
             {
-                using (SolidBrush bg = new SolidBrush(Color.FromArgb(28, 30, 34)))
+                using (SolidBrush bg = new SolidBrush(Theme.Card))
                     g.FillPath(bg, path);
-                using (Pen border = new Pen(Color.FromArgb(60, 64, 72), 1))
+                using (Pen border = new Pen(Theme.Border, 1))
                     g.DrawPath(border, path);
             }
 
@@ -205,17 +213,17 @@ namespace KeyboardWriterHelper
                 SizeF tabSz = g.MeasureString(tabBadge, popupFont);
                 Rectangle pill = new Rectangle(x - inset, inset, (int)tabSz.Width + 2 * inset, Height - 2 * inset);
                 using (GraphicsPath p = RoundedRect(pill, radius))
-                using (SolidBrush b = new SolidBrush(Color.FromArgb(37, 99, 235)))
+                using (SolidBrush b = new SolidBrush(Theme.Accent))
                     g.FillPath(b, p);
-                using (SolidBrush txt = new SolidBrush(Color.White))
-                    g.DrawString(tabBadge, popupFont, txt, x, y);
+                using (SolidBrush txt = new SolidBrush(Theme.OnAccent))
+                    g.DrawString(tabBadge, strongFont, txt, x, y);
 
                 x += (int)tabSz.Width + S(14);
-                using (SolidBrush wordBrush = new SolidBrush(Color.FromArgb(240, 243, 246)))
+                using (SolidBrush wordBrush = new SolidBrush(Theme.Text))
                     g.DrawString(predictionWord, popupFont, wordBrush, x, y);
 
                 SizeF escSz = g.MeasureString("Esc", popupFont);
-                using (SolidBrush hintBrush = new SolidBrush(Color.FromArgb(140, 144, 152)))
+                using (SolidBrush hintBrush = new SolidBrush(Theme.Muted))
                     g.DrawString("Esc", popupFont, hintBrush, Width - escSz.Width - S(8), y);
                 return;
             }
@@ -227,26 +235,26 @@ namespace KeyboardWriterHelper
                 string word = currentChoices[i];
                 bool active = string.Equals(word, currentFix, StringComparison.OrdinalIgnoreCase);
                 string text = (i + 1) + ". " + word;
-                SizeF sz = g.MeasureString(text, popupFont);
+                SizeF sz = g.MeasureString(text, strongFont);
 
                 if (active)
                 {
                     Rectangle pill = new Rectangle(x - inset, inset, (int)sz.Width + 2 * inset, Height - 2 * inset);
                     using (GraphicsPath p = RoundedRect(pill, radius))
-                    using (SolidBrush b = new SolidBrush(Color.FromArgb(22, 163, 74)))
+                    using (SolidBrush b = new SolidBrush(Theme.Accent))
                         g.FillPath(b, p);
-                    using (SolidBrush txt = new SolidBrush(Color.White))
-                        g.DrawString(text, popupFont, txt, x, y);
+                    using (SolidBrush txt = new SolidBrush(Theme.OnAccent))
+                        g.DrawString(text, strongFont, txt, x, y);
                 }
                 else
                 {
-                    using (SolidBrush txt = new SolidBrush(Color.FromArgb(180, 184, 192)))
+                    using (SolidBrush txt = new SolidBrush(Theme.Muted))
                         g.DrawString(text, popupFont, txt, x, y);
                 }
                 x += (int)sz.Width + S(14);
             }
 
-            using (SolidBrush hintBrush = new SolidBrush(Color.FromArgb(180, 184, 192)))
+            using (SolidBrush hintBrush = new SolidBrush(Theme.Muted))
                 g.DrawString("⌫", popupFont, hintBrush, hintX, y);
         }
 

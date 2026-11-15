@@ -483,9 +483,8 @@ namespace KeyboardWriterHelper
             Btn clear = new Btn("Clear all learning", ButtonKind.Danger);
             clear.Click += delegate
             {
-                if (MessageBox.Show(this, "Forget all learned words, preferences and feedback counts? " +
-                    "Your manual My words and My fixes lists will be kept.", Text,
-                    MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+                if (!Dialog.Ask(this, "Clear all learning?", "Forget all learned words, preferences and feedback counts? " +
+                    "Your manual My words and My fixes lists will be kept.", null, "Clear all", "Keep")) return;
                 app.ClearPersonalLearning();
                 Reload();
             };
@@ -575,10 +574,9 @@ namespace KeyboardWriterHelper
             string typed = eq > 0 ? text.Substring(0, eq).Trim() : "", fix = eq > 0 ? text.Substring(eq + 1).Trim() : "";
             if (!IsTypable(typed) || fix.Length == 0)
             {
-                MessageBox.Show(this,
+                Dialog.Tell(this, "That is not a fix yet",
                     "Write it as  typo=correction , for example  brb=be right back .\r\n\r\n" +
-                    "The left side is one to four words, made of letters.",
-                    Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    "The left side is one to four words, made of letters.");
                 return false;
             }
             app.AlwaysFix(typed, fix);

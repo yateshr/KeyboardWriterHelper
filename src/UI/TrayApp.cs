@@ -333,7 +333,34 @@ namespace KeyboardWriterHelper
                 bmp.Save(Path.Combine(folder, "tray-menu.png"), System.Drawing.Imaging.ImageFormat.Png);
             }
             menu.Close();
-        }
+            using (CandidatePopup popup = new CandidatePopup())
+            {
+                popup.ShowCandidates("there's", new string[] { "there's", "theirs", "there" }, IntPtr.Zero);
+                for (int k = 0; k < 5; k++) { Application.DoEvents(); Thread.Sleep(40); }
+                using (Bitmap bmp = new Bitmap(popup.Width, popup.Height))
+                {
+                    popup.DrawToBitmap(bmp, new Rectangle(0, 0, popup.Width, popup.Height));
+                    bmp.Save(Path.Combine(folder, "popup-fix.png"), System.Drawing.Imaging.ImageFormat.Png);
+                }
+                popup.ShowPrediction("something", "som", IntPtr.Zero);
+                for (int k = 0; k < 5; k++) { Application.DoEvents(); Thread.Sleep(40); }
+                using (Bitmap bmp = new Bitmap(popup.Width, popup.Height))
+                {
+                    popup.DrawToBitmap(bmp, new Rectangle(0, 0, popup.Width, popup.Height));
+                    bmp.Save(Path.Combine(folder, "popup-prediction.png"), System.Drawing.Imaging.ImageFormat.Png);
+                }
+            }
+            using (DialogForm dialog = new DialogForm("Version 2.2 is available", "You have 2.1. The app restarts by itself after the update.",
+                "- New look. The settings window is redesigned.\r\n- Light and dark, following Windows.\r\n- Fixed resrat becoming resort.", "Update now", "Later"))
+            {
+                dialog.Show();
+                for (int k = 0; k < 5; k++) { Application.DoEvents(); Thread.Sleep(40); }
+                using (Bitmap bmp = new Bitmap(dialog.Width, dialog.Height))
+                {
+                    dialog.DrawToBitmap(bmp, new Rectangle(0, 0, dialog.Width, dialog.Height));
+                    bmp.Save(Path.Combine(folder, "dialog-update.png"), System.Drawing.Imaging.ImageFormat.Png);
+                }
+            }        }
 
         public string LastErrorText { get { return counters.LastError; } }
 
@@ -484,9 +511,8 @@ namespace KeyboardWriterHelper
                     }
                     else if (asked)
                     {
-                        MessageBox.Show(failure == null ? "You have the latest version (" + Updater.Current() + ")."
-                            : "Could not check for updates: " + failure, AppName, MessageBoxButtons.OK,
-                            failure == null ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+                        if (failure == null) Dialog.Tell(null, "You have the latest version", "Version " + Updater.Current() + " is the newest one.");
+                        else Dialog.Tell(null, "Could not check for updates", failure);
                     }
                 });
             });
@@ -504,9 +530,11 @@ namespace KeyboardWriterHelper
         {
             UpdateInfo info = pendingUpdate;
             if (info == null || installingUpdate) return;
-            string notes = string.IsNullOrEmpty(info.Notes) ? "" : "\r\n\r\n" + (info.Notes.Length > 700 ? info.Notes.Substring(0, 700) + "..." : info.Notes).Replace("\n", "\r\n");
-            if (MessageBox.Show("Version " + info.Version + " is available (you have " + Updater.Current() + ")." + notes +
-                "\r\n\r\nUpdate now? The app restarts by itself.", AppName, MessageBoxButtons.YesNo, MessageBoxIcon.Information) != DialogResult.Yes)
+            // The release notes are Markdown; show them as plain text.
+            string notes = string.IsNullOrEmpty(info.Notes) ? null :
+                (info.Notes.Length > 700 ? info.Notes.Substring(0, 700) + "..." : info.Notes).Replace("**", "").Replace("`", "");
+            if (!Dialog.Ask(null, "Version " + info.Version + " is available",
+                "You have " + Updater.Current() + ". The app restarts by itself after the update.", notes, "Update now", "Later"))
                 return;
             installingUpdate = true;
             Say("Downloading version " + info.Version + "...");
@@ -519,13 +547,13 @@ namespace KeyboardWriterHelper
                     installingUpdate = false;
                     if (error != null)
                     {
-                        MessageBox.Show("The update was not installed: " + error, AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        Dialog.Tell(null, "The update was not installed", error);
                         return;
                     }
                     try { Updater.Restart(exe); }
                     catch (Exception ex)
                     {
-                        MessageBox.Show("Updated, but the new version did not start: " + ex.Message + "\r\nStart it from " + exe, AppName);
+                        Dialog.Tell(null, "Updated, but the new version did not start", ex.Message + "\r\nStart it from " + exe);
                         return;
                     }
                     ExitThread();

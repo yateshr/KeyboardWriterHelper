@@ -94,8 +94,7 @@ namespace KeyboardWriterHelper
             {
                 if (!first)
                 {
-                    MessageBox.Show(TrayApp.AppName + " is already running (look in the system tray).",
-                        TrayApp.AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    Dialog.Tell(null, TrayApp.AppName + " is already running", "Look for its icon in the system tray, next to the clock.");
                     return 0;
                 }
                 Application.EnableVisualStyles();
