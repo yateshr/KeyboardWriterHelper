@@ -47,6 +47,7 @@ namespace KeyboardWriterHelper
                 shotApp.SaveSettingsShots(args[1]);
                 return 0;
             }
+            if (args.Length >= 5 && args[0] == "--wizard-art") return WizardArt.Run(args);
             if (args.Length >= 1 && args[0] == "--update-check")
             {
                 // Prints whether a newer release exists; with "--install <exe>" also swaps that file for it (a test).

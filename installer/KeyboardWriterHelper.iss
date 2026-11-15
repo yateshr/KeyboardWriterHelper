@@ -65,6 +65,9 @@ Name: "startup"; Description: "Start {#MyAppName} when I sign in to Windows"; Gr
 Name: "desktopicon"; Description: "Put an icon on the desktop"; GroupDescription: "Shortcuts:"; Flags: unchecked
 
 [Files]
+; Setup draws its own pictures at the exact size they are shown (see DrawWizardArt), using
+; the app itself. It is listed first so it comes out of the compressed data quickly.
+Source: "{#AppExe}"; DestName: "art.exe"; Flags: dontcopy
 Source: "{#AppExe}"; DestDir: "{app}"; DestName: "{#MyAppExeName}"; Flags: ignoreversion
 Source: "..\CHANGELOG.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\THIRD_PARTY_NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
@@ -108,10 +111,51 @@ begin
     Result := 'Could not read ' + Name + '.';
 end;
 
+{ Draws a picture at the exact pixel size of the control that shows it, so nothing is
+  stretched and the vector drawing stays sharp at any Windows scaling. If it cannot be
+  drawn, the bitmaps built into setup stay. }
+procedure DrawArt(Image: TBitmapImage; const Kind: String; const BackColor: Integer);
+var
+  Picture: String;
+  Code: Integer;
+begin
+  Picture := ExpandConstant('{tmp}\art-' + Kind + '-' + IntToStr(Image.Width) + 'x' + IntToStr(Image.Height) + '.bmp');
+  if Exec(ExpandConstant('{tmp}\art.exe'),
+          '--wizard-art "' + Picture + '" ' + Kind + ' ' + IntToStr(Image.Width) + ' ' + IntToStr(Image.Height) +
+          ' {#MyVersion} ' + IntToStr(BackColor),
+          '', SW_HIDE, ewWaitUntilTerminated, Code) and (Code = 0) and FileExists(Picture) then
+  begin
+    Image.Stretch := False;
+    Image.Bitmap.LoadFromFile(Picture);
+  end;
+end;
+
+function GetSysColor(Index: Integer): Integer; external 'GetSysColor@user32.dll stdcall';
+
+{ The colour behind the small picture as red-green-blue; a Windows colour name is looked up. }
+function PanelColor: Integer;
+begin
+  Result := WizardForm.MainPanel.Color;
+  if Result < 0 then Result := GetSysColor(Result and $FF);
+end;
+
+procedure DrawWizardArt;
+begin
+  if WizardSilent then Exit;
+  try
+    ExtractTemporaryFile('art.exe');
+    DrawArt(WizardForm.WizardBitmapImage, 'large', 0);
+    DrawArt(WizardForm.WizardBitmapImage2, 'large', 0);
+    DrawArt(WizardForm.WizardSmallBitmapImage, 'small', PanelColor);
+  except
+  end;
+end;
+
 procedure InitializeWizard;
 var
   Changes, Credits: TOutputMsgMemoWizardPage;
 begin
+  DrawWizardArt;
   { A short one for the end. }
   AddJoke('It works on my machine. Now it works on yours too.');
   AddJoke('Deployed on a Friday. Brave. We salute you.');
