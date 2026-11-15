@@ -14,6 +14,8 @@ namespace KeyboardWriterHelper
     // so the logo and the text are as sharp as the screen allows at any scaling.
     static class WizardArt
     {
+        static TextRenderingHint hint = TextRenderingHint.AntiAlias;
+
         public static int Run(string[] args)
         {
             try
@@ -22,6 +24,7 @@ namespace KeyboardWriterHelper
                 int width = int.Parse(args[3]), height = int.Parse(args[4]);
                 string version = args.Length > 5 ? args[5] : "";
                 int back = args.Length > 6 ? int.Parse(args[6]) : 0xFFFFFF;
+                if (args.Length > 7 && args[7] == "ct") hint = TextRenderingHint.ClearTypeGridFit;
                 if (width < 8 || height < 8 || width > 4000 || height > 4000) return 2;
                 using (Bitmap bmp = kind == "small" ? Small(width, height, back) : Large(width, height, version))
                     bmp.Save(path, ImageFormat.Bmp);
@@ -30,8 +33,9 @@ namespace KeyboardWriterHelper
             catch (Exception) { return 1; }
         }
 
-        // Drawn straight at the final size: shapes are anti-aliased by GDI+ and the text is
-        // hinted to the pixel grid. (Drawing larger and scaling down looked softer.)
+        // Drawn straight at the final size: shapes and text are anti-aliased by GDI+, in grey
+        // (not ClearType, which leaves colour fringes on a picture). Drawing larger and
+        // scaling down looked softer.
         const int Oversample = 1;
 
         static Bitmap Finish(Bitmap big, int width, int height)
@@ -55,9 +59,12 @@ namespace KeyboardWriterHelper
             Bitmap big = new Bitmap(width * s, height * s, PixelFormat.Format24bppRgb);
             using (Graphics g = Graphics.FromImage(big))
             {
-                g.Clear(Color.FromArgb(backColor & 0xFF, (backColor >> 8) & 0xFF, (backColor >> 16) & 0xFF));
+                // The page colour behind it cannot be known (dark or light), so the corners are the
+                // key's own dark green: a small square tile, with no white edge.
+                Color green = Color.FromArgb(22, 163, 74);
+                g.Clear(Theme.Shade(green, 0.33));
                 int size = Math.Min(big.Width, big.Height);
-                Theme.DrawLogo(g, new Rectangle((big.Width - size) / 2, (big.Height - size) / 2, size, size), Color.FromArgb(22, 163, 74));
+                Theme.DrawLogo(g, new Rectangle((big.Width - size) / 2, (big.Height - size) / 2, size, size), green);
             }
             return Finish(big, width, height);
         }
@@ -73,7 +80,7 @@ namespace KeyboardWriterHelper
             {
                 g.SmoothingMode = SmoothingMode.AntiAlias;
                 g.PixelOffsetMode = PixelOffsetMode.HighQuality;
-                g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+                g.TextRenderingHint = hint;
 
                 using (LinearGradientBrush bg = new LinearGradientBrush(new Rectangle(0, 0, W, H),
                     Color.FromArgb(4, 40, 24), Color.FromArgb(22, 128, 62), 70f))
