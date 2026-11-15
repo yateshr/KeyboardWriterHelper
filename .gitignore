@@ -8,3 +8,5 @@ release-dist/
 *.user
 third_party/languagetool/grammar.xml
 third_party/github-typo-corpus/*.gz
+installer/build/
+installer/Output/

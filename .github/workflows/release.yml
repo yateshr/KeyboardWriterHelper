@@ -40,6 +40,19 @@ jobs:
         shell: cmd
         run: test.cmd
 
+      - name: Build and test the installer (Inno Setup)
+        shell: pwsh
+        run: |
+          $iscc = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+          if (-not $iscc -and -not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup -y --no-progress
+          }
+          $env:KWH_SKIP_BUILD = "1"
+          cmd /c installer\build-installer.cmd
+          if ($LASTEXITCODE -ne 0) { throw "The installer did not build." }
+          cmd /c installer\test-installer.cmd
+          if ($LASTEXITCODE -ne 0) { throw "The installer did not install and uninstall cleanly." }
+
       - name: Package Release Assets & Checksums
         shell: pwsh
         run: |
@@ -49,6 +62,10 @@ jobs:
 
           Write-Host "Packaging release for tag: $tag"
           New-Item -ItemType Directory -Force -Path release-dist | Out-Null
+
+          # The installer, and below it the portable versions
+          $setup = Get-ChildItem installer/Output -Filter "KeyboardWriterHelper-Setup-*.exe" | Select-Object -First 1
+          Copy-Item $setup.FullName -Destination "release-dist/KeyboardWriterHelper-Setup-$tag.exe"
 
           # Standalone executables
           Copy-Item KeyboardWriterHelper.exe -Destination release-dist/KeyboardWriterHelper-net40.exe
@@ -98,7 +115,10 @@ jobs:
           $text = Get-Content CHANGELOG.md -Raw
           $m = [regex]::Match($text, "(?ms)^## $([regex]::Escape($ver))[ \t]*\r?\n(.*?)(?=^## |\z)")
           $notes = if ($m.Success) { $m.Groups[1].Value.Trim() } else { "See CHANGELOG.md." }
-          Set-Content release-notes.md ($notes + "`n`nFull changelog: CHANGELOG.md")
+          $intro = '**Two ways to get it**' + "`n" +
+            '- **Installer** (recommended): `KeyboardWriterHelper-Setup-' + $tag + '.exe`. Installs for your account only, adds a Start menu entry, no administrator needed.' + "`n" +
+            '- **Portable**: `KeyboardWriterHelper-net40.exe` (or the zip). Nothing to install; run it from any folder.' + "`n`n"
+          Set-Content release-notes.md ($intro + $notes + "`n`nFull changelog: CHANGELOG.md")
 
           $assets = Get-ChildItem -Path release-dist | ForEach-Object { $_.FullName }
           gh release create "$tag" $assets --title "Keyboard Writer Helper $tag" --notes-file release-notes.md

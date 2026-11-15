@@ -13,6 +13,12 @@ Newest first. Versions 1.1 to 1.10, then 2.1, 2.2... (see `version.txt`).
 - The suggestion bar in the top-right corner and every message (update available, update
   problems, confirmations) use the same colours and type, instead of the grey Windows boxes.
 - About shows who made the app.
+- **Installer.** There are now two downloads: the portable exe as before, and a setup
+  (`KeyboardWriterHelper-Setup-<version>.exe`) with a welcome picture, a "before you install"
+  page, what is new, credits and "made by", a "you are all set" page, and a joke at the end.
+  It installs for your account only (no administrator), adds a Start menu entry, optionally starts
+  with Windows, and uninstalls cleanly from Windows Settings, asking whether to keep your settings.
+  The built-in updater keeps working on an installed copy.
 - Fully usable from the keyboard (Tab, arrow keys in the side menu, Space on switches).
 - New About page: version, update check, privacy and credits.
 - Fixed `resrat` becoming `resort` instead of `restart`.

@@ -14,9 +14,30 @@ and nothing is saved unless you ask for it (see Typos below).
 The rule behind every fix: changing correct text is worse than missing a mistake.
 When the app is not sure, it leaves the word as typed.
 
+## Download
+
+Two versions, same program:
+
+- **Installer** (`KeyboardWriterHelper-Setup-<version>.exe`): a short setup with a welcome page,
+  what is new, credits, and a Start menu entry. Installs for your Windows account only; no
+  administrator needed. Uninstall from Windows Settings > Apps.
+- **Portable** (`KeyboardWriterHelper-net40.exe` or the zip): nothing to install. Run it from any folder.
+
+Get them from the [Releases](https://github.com/yateshr/KeyboardWriterHelper/releases) page.
+To build the installer yourself you need [Inno Setup 6](https://jrsoftware.org/isinfo.php):
+`installer\build-installer.cmd`.
+
 ## Screenshots
 
-The settings window follows the Windows light or dark setting.
+The installer:
+
+<p>
+  <img src="assets/screenshots/installer-welcome.png" alt="Installer, welcome page" width="48%">
+  <img src="assets/screenshots/installer-finish.png" alt="Installer, finish page" width="48%">
+</p>
+
+
+The settings window, which follows the Windows light or dark setting:
 
 <p>
   <img src="assets/screenshots/settings-light.png" alt="Settings window, light" width="48%">
