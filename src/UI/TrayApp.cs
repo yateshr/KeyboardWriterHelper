@@ -321,6 +321,8 @@ namespace KeyboardWriterHelper
         // For the tests: the settings window's layout problems, one per line (empty = fine).
         public string[] CheckSettingsLayout()
         {
+            welcomeAt = DateTime.MinValue;
+            nextUpdateCheck = DateTime.MaxValue;
             SettingsForm form = new SettingsForm(this);
             try { return form.CheckLayout().ToArray(); }
             finally { form.Close(); }
@@ -328,6 +330,8 @@ namespace KeyboardWriterHelper
 
         public void SaveSettingsShots(string folder)
         {
+            welcomeAt = DateTime.MinValue;
+            nextUpdateCheck = DateTime.MaxValue;
             Directory.CreateDirectory(folder);
             SettingsForm form = new SettingsForm(this);
             form.Show();

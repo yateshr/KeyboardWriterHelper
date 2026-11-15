@@ -49,6 +49,8 @@ namespace KeyboardWriterHelper
             }
             if (args.Length == 1 && args[0] == "--settings-check")
             {
+                // Safety net: a test must never wait for a click that nobody will make.
+                System.Threading.Timer giveUp = new System.Threading.Timer(delegate { Environment.Exit(2); }, null, 60000, Timeout.Infinite);
                 // Opens every settings page at three sizes and says what does not fit.
                 Application.EnableVisualStyles();
                 string temp = Path.Combine(Path.GetTempPath(), "kwh-check-" + Guid.NewGuid().ToString("N"));
