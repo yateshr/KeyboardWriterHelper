@@ -714,9 +714,9 @@ namespace KeyboardWriterHelper
         // The big logo and name on the About page.
         sealed class AboutHeader : Surface, IFlow
         {
-            public AboutHeader() { TabStop = false; AccessibleRole = AccessibleRole.StaticText; AccessibleName = TrayApp.AppName + " " + Program.Version; }
+            public AboutHeader() { TabStop = false; AccessibleRole = AccessibleRole.StaticText; AccessibleName = TrayApp.AppName + " " + Program.Version + ", made by " + TrayApp.Author; }
 
-            public int Measure(int width) { return P(96); }
+            public int Measure(int width) { return P(104); }
 
             protected override void OnPaint(PaintEventArgs e)
             {
@@ -726,7 +726,8 @@ namespace KeyboardWriterHelper
                 Theme.DrawLogo(g, new Rectangle(0, P(8), size, size), Color.FromArgb(22, 163, 74));
                 int x = size + P(20);
                 TextRenderer.DrawText(g, TrayApp.AppName, F(Face.Title), new Rectangle(x, P(8), Width - x, P(40)), Theme.Text, Theme.OneLine);
-                TextRenderer.DrawText(g, "Version " + Program.Version, F(Face.Body), new Rectangle(x, P(50), Width - x, P(24)), Theme.Muted, Theme.OneLine);
+                TextRenderer.DrawText(g, "Version " + Program.Version, F(Face.Body), new Rectangle(x, P(48), Width - x, P(24)), Theme.Muted, Theme.OneLine);
+                TextRenderer.DrawText(g, "Made by " + TrayApp.Author, F(Face.BodyStrong), new Rectangle(x, P(74), Width - x, P(24)), Theme.Text, Theme.OneLine);
             }
         }
 

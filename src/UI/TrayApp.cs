@@ -24,6 +24,7 @@ namespace KeyboardWriterHelper
     sealed class TrayApp : ApplicationContext
     {
         public const string AppName = "Keyboard Writer Helper";
+        public const string Author = "YATESH ROHIT";
         const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
         const string RunValue = "KeyboardWriterHelper";
         const int MaxTrayText = 63; // NotifyIcon.Text throws beyond this

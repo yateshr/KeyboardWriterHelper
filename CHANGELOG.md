@@ -12,6 +12,7 @@ Newest first. Versions 1.1 to 1.10, then 2.1, 2.2... (see `version.txt`).
   lists, drop-downs and the tray menu. The window can be resized.
 - The suggestion bar in the top-right corner and every message (update available, update
   problems, confirmations) use the same colours and type, instead of the grey Windows boxes.
+- About shows who made the app.
 - Fully usable from the keyboard (Tab, arrow keys in the side menu, Space on switches).
 - New About page: version, update check, privacy and credits.
 - Fixed `resrat` becoming `resort` instead of `restart`.

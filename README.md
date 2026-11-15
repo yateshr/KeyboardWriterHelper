@@ -4,6 +4,8 @@
 
 [Changelog](CHANGELOG.md) · [Third-party credits](THIRD_PARTY_NOTICES.md) · [Releases](https://github.com/yateshr/KeyboardWriterHelper/releases)
 
+Made by YATESH ROHIT.
+
 A small, high-performance Windows tray app that fixes spelling mistakes in any program as you type.
 When you press Space after a misspelled word, it is replaced with the most likely
 intended word (`improrvie ` becomes `improve `). Nothing you type is sent anywhere,
