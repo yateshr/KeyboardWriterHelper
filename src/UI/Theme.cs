@@ -314,10 +314,15 @@ namespace KeyboardWriterHelper
         }
     }
 
-    // Children one under the other, full width, scrolling when they do not fit.
+    // Children one under the other, full width, scrolling up and down when they do not fit.
+    // It never scrolls sideways: when the vertical scrollbar is needed, the children are
+    // made that much narrower first.
     sealed class Stack : Panel
     {
         bool busy;
+
+        [DllImport("user32.dll")]
+        static extern bool ShowScrollBar(IntPtr hwnd, int bar, bool show);
 
         public Stack()
         {
@@ -332,32 +337,47 @@ namespace KeyboardWriterHelper
             Theme.StyleNative(this);
         }
 
+        // Windows may show a sideways scrollbar for a moment while the sizes settle; it is never wanted.
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == 0x83) ShowScrollBar(Handle, 0, false); // WM_NCCALCSIZE, SB_HORZ
+            base.WndProc(ref m);
+        }
+
+        // Places the children for the given width and returns the height they need.
+        int Place(int width, int scrollY)
+        {
+            int y = Padding.Top;
+            foreach (Control c in Controls)
+            {
+                if (!c.Visible) continue;
+                y += Theme.Px(this, c.Margin.Top);
+                IFlow flow = c as IFlow;
+                int h = flow != null ? flow.Measure(width) : c.Height;
+                c.SetBounds(Padding.Left, y + scrollY, width, h);
+                y += h + Theme.Px(this, c.Margin.Bottom);
+            }
+            return y + Padding.Bottom;
+        }
+
         protected override void OnLayout(LayoutEventArgs e)
         {
             base.OnLayout(e);
-            if (busy) return;
+            if (busy || Width <= 0) return;
             busy = true;
             try
             {
-                for (int pass = 0; pass < 2; pass++)
+                int scrollY = AutoScrollPosition.Y;
+                int full = Width - Padding.Horizontal;
+                int total = Place(full, scrollY);
+                if (total > ClientSize.Height + (Width - ClientSize.Width) * 0 && total > Height)
                 {
-                    int width = ClientSize.Width - Padding.Horizontal;
-                    int y = Padding.Top;
-                    int scrollY = AutoScrollPosition.Y;
-                    foreach (Control c in Controls)
-                    {
-                        if (!c.Visible) continue;
-                        y += Theme.Px(this, c.Margin.Top);
-                        IFlow flow = c as IFlow;
-                        int h = flow != null ? flow.Measure(width) : c.Height;
-                        c.SetBounds(Padding.Left, y + scrollY, width, h);
-                        y += h + Theme.Px(this, c.Margin.Bottom);
-                    }
-                    int total = y + Padding.Bottom;
-                    int before = ClientSize.Width;
-                    AutoScrollMinSize = new Size(0, total);
-                    if (ClientSize.Width == before) break;
+                    // Needs the vertical scrollbar: the children get narrower by its width.
+                    int bar = Width - ClientSize.Width;
+                    if (bar <= 0) bar = SystemInformation.VerticalScrollBarWidth * DeviceDpi / 96;
+                    total = Place(full - bar, scrollY);
                 }
+                AutoScrollMinSize = new Size(0, total);
             }
             finally { busy = false; }
         }
@@ -964,7 +984,7 @@ namespace KeyboardWriterHelper
             AccessibleName = caption;
         }
 
-        public int Measure(int width) { return P(42); }
+        public int Measure(int width) { return P(38); }
 
         protected override void OnMouseEnter(EventArgs e) { base.OnMouseEnter(e); hot = true; Invalidate(); }
         protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); hot = false; Invalidate(); }

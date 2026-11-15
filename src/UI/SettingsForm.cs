@@ -35,6 +35,8 @@ namespace KeyboardWriterHelper
         readonly Btn frequentTypos, recentTypos;
         readonly TileRow sessionTiles, allTimeTiles, healthTiles;
         readonly TextBlock healthError;
+        readonly TileRow diagTiles1, diagTiles2;
+        readonly TextBlock diagHint, diagIgnored, diagWhere;
         readonly StatusView status;
         readonly PageHeader header;
         readonly Panel pageHost, sidebar;
@@ -96,6 +98,11 @@ namespace KeyboardWriterHelper
             allTimeTiles = new TileRow(new string[] { "Words checked", "Corrections made", "Of corrections undone" });
             healthTiles = new TileRow(new string[] { "Slowest key (ms)", "Slow lookups skipped", "Errors" });
             healthError = new TextBlock("", Face.Caption, Theme.Danger);
+            diagTiles1 = new TileRow(new string[] { "Keys seen", "Words checked", "Corrections made" });
+            diagTiles2 = new TileRow(new string[] { "Keyboard hook put back", "Errors caught", "Slowest key (ms)" });
+            diagHint = new TextBlock("", Face.Body, null);
+            diagIgnored = new TextBlock("", Face.Body, null);
+            diagWhere = new TextBlock("", Face.Body, null);
 
             AddPage("General", "", "General", "The basics: when it runs, the shortcuts and the language.", GeneralPage());
             AddPage("Corrections", "", "Corrections", "Choose what gets fixed while you type.", CorrectionsPage());
@@ -108,6 +115,7 @@ namespace KeyboardWriterHelper
             AddPage("Typos", "", "Typos", "The fixes the app made. Mark one as always or never.", TyposPage());
             AddPage("Learning", "", "Learning", "The app can learn from how you undo and choose corrections.", LearningPage());
             AddPage("Statistics", "", "Statistics", "Numbers only. Nothing you type is ever recorded here.", StatsPage());
+            AddPage("Diagnostics", "", "Diagnostics", "Is it working? What the app sees, and why a key might be ignored.", DiagnosticsPage());
             AddPage("About", "", "About", "Version, updates and credits.", AboutPage());
 
             // Fill first, then the edges: that is the order WinForms docks in.
@@ -165,6 +173,59 @@ namespace KeyboardWriterHelper
             header.Height = header.HeightFor(header.Width);
             nav.Padding = new Padding(0, P(4), 0, 0);
             MinimumSize = new Size(P(780), P(540));
+        }
+
+        // Opens every page at three window sizes and reports what does not fit: text that
+        // needs more room than it has, or a control that runs past the edge. Used by the tests.
+        public List<string> CheckLayout()
+        {
+            List<string> problems = new List<string>();
+            Size[] sizes = { new Size(P(780), P(540)), new Size(P(920), P(660)), new Size(P(1400), P(900)) };
+            Show();
+            foreach (Size size in sizes)
+            {
+                ClientSize = size;
+                for (int i = 0; i < pages.Count; i++)
+                {
+                    ShowPage(i);
+                    Reload();
+                    for (int k = 0; k < 4; k++) { Application.DoEvents(); Thread.Sleep(20); }
+                    int before = problems.Count;
+                    CheckControls(pages[i], titles[i][0] + " at " + size.Width + "x" + size.Height, problems);
+                    if (problems.Count > before)
+                    {
+                        string picture = Path.Combine(Path.GetTempPath(), "kwh-layout-" + titles[i][0] + "-" + size.Width + "x" + size.Height + ".png");
+                        try
+                        {
+                            using (Bitmap bmp = new Bitmap(Width, Height))
+                            {
+                                DrawToBitmap(bmp, new Rectangle(0, 0, Width, Height));
+                                bmp.Save(picture, System.Drawing.Imaging.ImageFormat.Png);
+                            }
+                            problems.Add("  (picture: " + picture + ")");
+                        }
+                        catch (Exception) { }
+                    }
+                }
+            }
+            Hide();
+            return problems;
+        }
+
+        static void CheckControls(Control parent, string where, List<string> problems)
+        {
+            foreach (Control child in parent.Controls)
+            {
+                if (!child.Visible || child.Width <= 0) continue;
+                IFlow flow = child as IFlow;
+                if (flow != null && flow.Measure(child.Width) > child.Height + 2)
+                    problems.Add(where + ": " + child.GetType().Name + " is " + child.Height + " px tall but its text needs " + flow.Measure(child.Width));
+                if (child.Right > parent.ClientSize.Width + 1)
+                    problems.Add(where + ": " + child.GetType().Name + " runs past the right edge (" + child.Right + " > " + parent.ClientSize.Width + ")");
+                if (!(parent is Stack) && child.Bottom > parent.ClientSize.Height + 1)
+                    problems.Add(where + ": " + child.GetType().Name + " runs past the bottom edge");
+                CheckControls(child, where, problems);
+            }
         }
 
         // One PNG per page, to look at the design without clicking through it.
@@ -297,7 +358,32 @@ namespace KeyboardWriterHelper
                 Toggle("Other English spellings are correct too", "Colour and color are both left alone.",
                     app.Settings.AcceptVariants, delegate(bool v) { app.Settings.AcceptVariants = v; SpellingChanged(); }),
                 new ValueRow("Keyboard layout", "Used to guess which neighbouring key you meant. Auto follows Windows.", layoutBox, 190)));
+
+            Btn export = new Btn("Export...", ButtonKind.Secondary);
+            export.Click += delegate { ExportData(); };
+            Btn import = new Btn("Import...", ButtonKind.Secondary);
+            import.Click += delegate { ImportData(); };
+            page.Controls.Add(Heading("Back up", false));
+            page.Controls.Add(Group(
+                new ValueRow("Save my words, fixes and programs", "Writes them to one text file, to keep or to move to another PC.", export, 130),
+                new ValueRow("Load them from a file", "Adds what is in the file to what you already have. Nothing is removed.", import, 130)));
             return page;
+        }
+
+        static readonly string[] CornerNames = { "BottomLeft", "BottomRight", "TopLeft", "TopRight" };
+
+        Dropdown CornerDropdown()
+        {
+            Dropdown box = new Dropdown();
+            box.Items.AddRange(new string[] { "Bottom left", "Bottom right", "Top left", "Top right" });
+            int at = Array.IndexOf(CornerNames, app.Settings.PopupCorner);
+            box.Choose(at >= 0 ? at : 0);
+            box.SelectedIndexChanged += delegate
+            {
+                app.Settings.PopupCorner = CornerNames[box.SelectedIndex];
+                app.Settings.Save();
+            };
+            return box;
         }
 
         void SpellingChanged()
@@ -358,6 +444,7 @@ namespace KeyboardWriterHelper
             page.Controls.Add(Group(
                 Toggle("Show suggestions in the bottom-left corner", "A small bar lists the other possible words after a fix, and Smart Compose's guess.",
                     o.ShowCandidatePopup, delegate(bool v) { o.ShowCandidatePopup = v; o.Save(); }),
+                new ValueRow("Where the bar appears", "A corner of the screen you are typing on.", CornerDropdown(), 190),
                 Toggle("Smart Compose", "Guesses the next word from the words before it. Tab accepts it while it is shown.",
                     o.SmartCompose, delegate(bool v) { o.SmartCompose = v; o.Save(); })));
             page.Controls.Add(Heading("Where it works", false));
@@ -501,6 +588,106 @@ namespace KeyboardWriterHelper
             page.Controls.Add(clear);
             page.Controls.Add(learningStatus);
             return page;
+        }
+
+        Control DiagnosticsPage()
+        {
+            Stack page = NewStack();
+            page.Controls.Add(Heading("What it says", true));
+            page.Controls.Add(diagHint);
+            page.Controls.Add(Heading("Since the app started", false));
+            page.Controls.Add(diagTiles1);
+            diagTiles2.Margin = new Padding(0, 12, 0, 0);
+            page.Controls.Add(diagTiles2);
+            page.Controls.Add(Heading("Keys that were ignored", false));
+            page.Controls.Add(diagIgnored);
+            page.Controls.Add(Heading("Where it runs", false));
+            page.Controls.Add(diagWhere);
+            Btn copy = new Btn("Copy report", ButtonKind.Primary);
+            copy.Margin = new Padding(0, 24, 0, 0);
+            copy.Click += delegate
+            {
+                try { Clipboard.SetText(app.DiagnosticsText()); Dialog.Tell(this, "Report copied", "Paste it into a message. It holds numbers and program names only, never anything you typed."); }
+                catch (Exception) { Dialog.Tell(this, "Could not copy", "Windows would not let the app use the clipboard just now. Try again."); }
+            };
+            Btn log = new Btn("Open error log", ButtonKind.Secondary);
+            log.Click += delegate
+            {
+                string path = app.ErrorLogPath;
+                if (path != null && File.Exists(path)) Open(path);
+                else Dialog.Tell(this, "No errors", "Nothing has gone wrong, so there is no error log yet.");
+            };
+            Btn folder = new Btn("Open the data folder", ButtonKind.Secondary);
+            folder.Click += delegate { Open(app.DataFolder); };
+            page.Controls.Add(new ButtonSlot(copy, log, folder));
+            page.Controls.Add(Note("The report and the error log hold numbers, program names and error messages. Nothing you type is ever recorded."));
+            return page;
+        }
+
+        // ---- Back up and restore: words, fixes and programs in one text file ----
+
+        void ExportData()
+        {
+            using (SaveFileDialog dialog = new SaveFileDialog())
+            {
+                dialog.Title = "Save my words, fixes and programs";
+                dialog.Filter = "Text file (*.txt)|*.txt";
+                dialog.FileName = "keyboard-writer-helper-backup.txt";
+                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                StringBuilder text = new StringBuilder();
+                text.AppendLine("# Keyboard Writer Helper backup. Load it with Settings > General > Back up > Import.");
+                text.AppendLine("[words]");
+                foreach (string w in app.MyWords.All()) text.AppendLine(w);
+                text.AppendLine("[fixes]");
+                foreach (string f in app.MyFixes.All()) text.AppendLine(f);
+                text.AppendLine("[programs]");
+                foreach (string p in app.ExcludedApps.All()) text.AppendLine(p);
+                try
+                {
+                    File.WriteAllText(dialog.FileName, text.ToString(), new UTF8Encoding(false));
+                    Dialog.Tell(this, "Saved", app.MyWords.All().Length + " words, " + app.MyFixes.All().Length + " fixes and " +
+                        app.ExcludedApps.All().Length + " programs were saved to " + dialog.FileName + ".");
+                }
+                catch (Exception ex) { Dialog.Tell(this, "Could not save", ex.Message); }
+            }
+        }
+
+        void ImportData()
+        {
+            using (OpenFileDialog dialog = new OpenFileDialog())
+            {
+                dialog.Title = "Load words, fixes and programs";
+                dialog.Filter = "Text file (*.txt)|*.txt|All files (*.*)|*.*";
+                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                string[] lines;
+                try { lines = File.ReadAllLines(dialog.FileName); }
+                catch (Exception ex) { Dialog.Tell(this, "Could not read the file", ex.Message); return; }
+                int words = 0, fixes = 0, programs = 0, skipped = 0;
+                string section = "";
+                foreach (string raw in lines)
+                {
+                    string line = raw.Trim();
+                    if (line.Length == 0 || line.StartsWith("#")) continue;
+                    if (line.StartsWith("[") && line.EndsWith("]")) { section = line.Substring(1, line.Length - 2).ToLowerInvariant(); continue; }
+                    if (section == "words") { app.MyWords.Add(line); words++; }
+                    else if (section == "fixes")
+                    {
+                        int eq = line.IndexOf('=');
+                        string typed = eq > 0 ? line.Substring(0, eq).Trim() : "", fix = eq > 0 ? line.Substring(eq + 1).Trim() : "";
+                        if (IsTypable(typed) && fix.Length > 0) { app.AlwaysFix(typed, fix); fixes++; } else skipped++;
+                    }
+                    else if (section == "programs")
+                    {
+                        app.ExcludedApps.Add(line.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? line : line + ".exe");
+                        programs++;
+                    }
+                    else skipped++;
+                }
+                app.MyWords.Sync(); app.MyFixes.Sync(); app.ExcludedApps.Sync();
+                Reload();
+                Dialog.Tell(this, "Loaded", words + " words, " + fixes + " fixes and " + programs + " programs were added." +
+                    (skipped > 0 ? "\r\n" + skipped + " lines could not be used and were skipped." : ""));
+            }
         }
 
         Control StatsPage()
@@ -648,6 +835,13 @@ namespace KeyboardWriterHelper
             typoItems = items;
             Fill(typosFrame, ref shownTypos, lines);
 
+            string[] diag = app.DiagnosticsNumbers();
+            diagTiles1.SetValues(new string[] { diag[0], diag[1], diag[2] });
+            diagTiles2.SetValues(new string[] { diag[3], diag[4], diag[5] });
+            diagHint.Value = app.DiagnosticsHint();
+            diagIgnored.Value = app.IgnoredText();
+            diagWhere.Value = app.WhereText();
+
             if (app.Enabled) status.Set("Auto-correct is on", Theme.Accent);
             else status.Set("Auto-correct is paused", Theme.Muted);
         }
@@ -745,16 +939,33 @@ namespace KeyboardWriterHelper
                 Margin = spacing;
             }
 
-            public int Measure(int width) { return Theme.Px(this, 36); }
+            // Buttons go on a second row when they do not fit side by side.
+            int Rows(int width)
+            {
+                int gap = Theme.Px(this, 10), x = 0, rows = 1;
+                foreach (Btn b in buttons)
+                {
+                    if (x > 0 && x + b.PreferredWidth > width) { rows++; x = 0; }
+                    x += b.PreferredWidth + gap;
+                }
+                return rows;
+            }
+
+            public int Measure(int width)
+            {
+                int row = Theme.Px(this, 36), gap = Theme.Px(this, 10);
+                return Rows(width) * row + (Rows(width) - 1) * gap;
+            }
 
             protected override void OnLayout(LayoutEventArgs e)
             {
                 base.OnLayout(e);
-                int x = 0, gap = Theme.Px(this, 10);
+                int x = 0, y = 0, gap = Theme.Px(this, 10), row = Theme.Px(this, 36);
                 foreach (Btn b in buttons)
                 {
                     b.Margin = new Padding(0);
-                    b.SetBounds(x, 0, b.PreferredWidth, Height);
+                    if (x > 0 && x + b.PreferredWidth > Width) { x = 0; y += row + gap; }
+                    b.SetBounds(x, y, b.PreferredWidth, row);
                     x += b.PreferredWidth + gap;
                 }
             }

@@ -63,6 +63,7 @@ namespace KeyboardWriterHelper
         {
             this.folder = folder;
             Directory.CreateDirectory(folder);
+            ErrorLog.Init(folder);
             statsPath = Path.Combine(folder, "stats.txt");
             lifetimePath = Path.Combine(folder, "lifetime.txt");
             ownExe = Path.GetFileName(Application.ExecutablePath);
@@ -128,13 +129,13 @@ namespace KeyboardWriterHelper
             corrector.Changed += OnChanged;
             corrector.CandidateOffered += delegate(string fix, string[] choices)
             {
-                if (settings.ShowCandidatePopup) OnUi(delegate { candidatePopup.ShowCandidates(fix, choices, Native.GetForegroundWindow()); });
+                if (settings.ShowCandidatePopup) OnUi(delegate { candidatePopup.Corner = settings.PopupCorner; candidatePopup.ShowCandidates(fix, choices, Native.GetForegroundWindow()); });
             };
             corrector.CandidateDismissed += delegate { OnUi(candidatePopup.Dismiss); };
             corrector.PredictionOffered += delegate(string pred, string pfx)
             {
                 if (settings.SmartCompose && settings.ShowCandidatePopup)
-                    OnUi(delegate { candidatePopup.ShowPrediction(pred, pfx, Native.GetForegroundWindow()); });
+                    OnUi(delegate { candidatePopup.Corner = settings.PopupCorner; candidatePopup.ShowPrediction(pred, pfx, Native.GetForegroundWindow()); });
             };
             corrector.PredictionDismissed += delegate { OnUi(candidatePopup.Dismiss); };
             corrector.Learned += delegate(string word)
@@ -153,11 +154,8 @@ namespace KeyboardWriterHelper
             housekeeping.Interval = 1000;
             housekeeping.Tick += delegate { Housekeeping(); };
             housekeeping.Start();
-            // Once, not at every sign-in.
-            if (firstRun)
-                tray.ShowBalloonTip(6000, AppName,
-                    "Running. Misspelled words are fixed when you press Space. Press Backspace right after a fix to undo it.",
-                    ToolTipIcon.Info);
+            // Once, not at every sign-in: a short welcome, a moment after start.
+            if (firstRun) welcomeAt = DateTime.UtcNow.AddSeconds(2);
             AppDomain.CurrentDomain.ProcessExit += delegate { DisposeResources(); };
             AppDomain.CurrentDomain.UnhandledException += delegate { DisposeResources(); };
             Application.ApplicationExit += delegate { DisposeResources(); };
@@ -315,6 +313,14 @@ namespace KeyboardWriterHelper
                 counters.Words.ToString("N0"), counters.Corrections.ToString("N0"), counters.Undone.ToString("N0"),
                 words.ToString("N0"), fixes.ToString("N0"), Share(undone, fixes),
                 counters.SlowestKeyMs.ToString("N0"), counters.TooSlow.ToString("N0"), counters.Errors.ToString("N0") };
+        }
+
+        // For the tests: the settings window's layout problems, one per line (empty = fine).
+        public string[] CheckSettingsLayout()
+        {
+            SettingsForm form = new SettingsForm(this);
+            try { return form.CheckLayout().ToArray(); }
+            finally { form.Close(); }
         }
 
         public void SaveSettingsShots(string folder)
@@ -564,8 +570,94 @@ namespace KeyboardWriterHelper
             worker.Start();
         }
 
+        // The first-run welcome: when to show it (MinValue = nothing to show).
+        DateTime welcomeAt = DateTime.MinValue;
+
+        void ShowWelcome()
+        {
+            if (Dialog.Ask(null, "Welcome to " + AppName,
+                "It is running in the system tray, next to the clock. Type as usual: a misspelled word is fixed when you press Space, " +
+                "and Backspace right after a fix undoes it. Ctrl+Alt+K pauses and resumes it.\r\n\r\n" +
+                "The suggestion bar shows the other possible words in a corner of the screen; you can choose which corner in Settings.",
+                null, "Open settings", "Got it"))
+                ShowSettings();
+        }
+
+        // ---- Diagnostics: is it working, and if not, why ----
+
+        // Keys seen, words checked, corrections, hook put back, errors, slowest key (ms).
+        public string[] DiagnosticsNumbers()
+        {
+            return new string[] {
+                counters.Keys.ToString("N0"), counters.Words.ToString("N0"), counters.Corrections.ToString("N0"),
+                counters.HookReinstalls.ToString("N0"), counters.Errors.ToString("N0"), counters.SlowestKeyMs.ToString("N0") };
+        }
+
+        // What to look at first.
+        public string DiagnosticsHint()
+        {
+            if (!corrector.Enabled) return "Auto-correct is paused, so nothing is being corrected. Turn it on in General, or press the pause shortcut.";
+            if (counters.Keys == 0 && DateTime.Now - startedAt > TimeSpan.FromSeconds(45))
+                return "No key has reached the app yet. Type something in any program. If this stays at 0, something is blocking the keyboard: " +
+                       "a program running as administrator, remote-desktop or security software. Copy the report and send it with your question.";
+            if (counters.Keys > 0 && counters.Words == 0)
+                return "Keys are arriving but no word has been checked yet. Finish a word with Space.";
+            if (counters.Errors > 0) return "Some errors were caught. Open the error log for details; the app kept running.";
+            return "Everything looks normal. If a word was not corrected, it may be a real word (those are left alone on purpose), " +
+                   "or the program in front is in the Programs list.";
+        }
+
+        // The programs whose keys were ignored, and why. No typed text.
+        public string IgnoredText()
+        {
+            string[] lines = counters.SkippedLines();
+            return lines.Length == 0 ? "Nothing was ignored." : string.Join("\r\n", lines);
+        }
+
+        public string WhereText()
+        {
+            bool admin = false;
+            try { admin = new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator); }
+            catch (Exception) { }
+            return "Windows " + Environment.OSVersion.Version + (Environment.Is64BitOperatingSystem ? " (64-bit)" : "") + "\r\n" +
+                   "Runs as administrator: " + (admin ? "yes" : "no") + ". A program running as administrator does not send its keys to this app unless this app is too.\r\n" +
+                   "Last program typed in: " + (corrector.LastApp.Length > 0 ? corrector.LastApp : "none yet") + "\r\n" +
+                   "Dictionaries: " + spelling.Languages;
+        }
+
+        // The whole report, for pasting into a message. Numbers and names only.
+        public string DiagnosticsText()
+        {
+            string[] n = DiagnosticsNumbers();
+            StringBuilder s = new StringBuilder();
+            s.AppendLine(AppName + " " + Program.Version);
+            s.AppendLine("Started: " + startedAt.ToString("yyyy-MM-dd HH:mm:ss") + "   Auto-correct: " + (corrector.Enabled ? "on" : "paused"));
+            s.AppendLine(WhereText());
+            s.AppendLine();
+            s.AppendLine("Keys seen: " + n[0] + "   Words checked: " + n[1] + "   Corrections: " + n[2]);
+            s.AppendLine("Keyboard hook put back: " + n[3] + "   Errors: " + n[4] + "   Slowest key (ms): " + n[5]);
+            if (counters.LastError != null) s.AppendLine("Last error: " + counters.LastError);
+            s.AppendLine();
+            s.AppendLine("Keys ignored (program: reason = count):");
+            s.AppendLine(IgnoredText());
+            s.AppendLine();
+            s.AppendLine("Settings: fixOnPunctuation=" + settings.FixOnPunctuation + " capitalize=" + settings.CapitalizeSentences +
+                " phrases=" + settings.FixPhrases + " context=" + settings.UseContext + " skipFullscreen=" + settings.SkipFullscreenGames +
+                " popup=" + settings.ShowCandidatePopup + " corner=" + settings.PopupCorner + " compose=" + settings.SmartCompose +
+                " updates=" + settings.CheckForUpdates + " layout=" + settings.KeyboardLayout + " language=" + settings.MainLanguage);
+            s.AppendLine("Lists: " + myWords.All().Length + " words, " + myFixes.All().Length + " fixes, " + excludedApps.All().Length + " programs");
+            return s.ToString();
+        }
+
+        public string ErrorLogPath { get { return ErrorLog.Path; } }
+
         void Housekeeping()
         {
+            if (welcomeAt != DateTime.MinValue && DateTime.UtcNow >= welcomeAt)
+            {
+                welcomeAt = DateTime.MinValue;
+                ShowWelcome();
+            }
             if (settings.CheckForUpdates && DateTime.UtcNow >= nextUpdateCheck)
             {
                 nextUpdateCheck = DateTime.UtcNow.AddHours(24);

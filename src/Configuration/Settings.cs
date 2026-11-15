@@ -94,6 +94,8 @@ namespace KeyboardWriterHelper
         // The English spelling that supplies the suggestions ("" = the first one installed).
         public volatile string MainLanguage = "";
         public volatile string KeyboardLayout = "Auto";
+        // Where the suggestion bar appears: BottomLeft, BottomRight, TopLeft or TopRight.
+        public volatile string PopupCorner = "BottomLeft";
 
         // path = null keeps the defaults and saves nothing (the self-test).
         public Settings(string path)
@@ -126,6 +128,7 @@ namespace KeyboardWriterHelper
                     else if (key == "checkForUpdates") CheckForUpdates = value;
                     else if (key == "mainLanguage") MainLanguage = text;
                     else if (key == "keyboardLayout") KeyboardLayout = text;
+                    else if (key == "popupCorner") PopupCorner = text;
                     else if (key == "pauseHotkey") PauseHotkey = Hotkey.Parse(text) ?? PauseHotkey;
                     else if (key == "nextHotkey") NextHotkey = Hotkey.Parse(text) ?? NextHotkey;
                 }
@@ -201,6 +204,7 @@ namespace KeyboardWriterHelper
                     "checkForUpdates=" + Text(CheckForUpdates) +
                     "mainLanguage=" + MainLanguage + "\r\n" +
                     "keyboardLayout=" + KeyboardLayout + "\r\n" +
+                    "popupCorner=" + PopupCorner + "\r\n" +
                     "pauseHotkey=" + PauseHotkey + "\r\n" +
                     "nextHotkey=" + NextHotkey + "\r\n");
             }

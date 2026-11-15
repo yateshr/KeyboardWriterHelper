@@ -47,6 +47,21 @@ namespace KeyboardWriterHelper
                 shotApp.SaveSettingsShots(args[1]);
                 return 0;
             }
+            if (args.Length == 1 && args[0] == "--settings-check")
+            {
+                // Opens every settings page at three sizes and says what does not fit.
+                Application.EnableVisualStyles();
+                string temp = Path.Combine(Path.GetTempPath(), "kwh-check-" + Guid.NewGuid().ToString("N"));
+                TextWriter o = Out();
+                try
+                {
+                    string[] problems = new TrayApp(temp).CheckSettingsLayout();
+                    foreach (string problem in problems) o.WriteLine(problem);
+                    o.WriteLine(problems.Length == 0 ? "settings window layout: ok" : problems.Length + " layout problems");
+                    return problems.Length == 0 ? 0 : 1;
+                }
+                catch (Exception ex) { o.WriteLine("could not open the window here: " + ex.Message); return 2; }
+            }
             if (args.Length >= 5 && args[0] == "--wizard-art") return WizardArt.Run(args);
             if (args.Length >= 1 && args[0] == "--update-check")
             {

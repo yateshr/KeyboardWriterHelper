@@ -29,6 +29,9 @@ namespace KeyboardWriterHelper
         // more than this many times the normal size.
         const double MaxSizeFactor = 2.5;
 
+        // BottomLeft, BottomRight, TopLeft or TopRight; set from the settings before it is shown.
+        public string Corner = "BottomLeft";
+
         double scale = 1.0;
         Font popupFont, strongFont;
 
@@ -168,7 +171,7 @@ namespace KeyboardWriterHelper
             Present(screen, Math.Min(Math.Max(S(180), width), maxWidth));
         }
 
-        // Always the bottom left corner of the screen being typed on, so it is in the
+        // Always the same corner of the screen being typed on (the settings say which), so it is in the
         // same place every time and never covers the text. The size is set after
         // the window is shown too: moving to a screen with other scaling can make
         // Windows resize it.
@@ -176,7 +179,12 @@ namespace KeyboardWriterHelper
         {
             Rectangle area = screen.WorkingArea;
             Size size = new Size(width, Math.Max(S(36), popupFont.Height + S(16)));
-            Rectangle bounds = new Rectangle(new Point(area.Left + S(20), area.Bottom - size.Height - S(20)), size);
+            int margin = S(20);
+            bool right = Corner == "BottomRight" || Corner == "TopRight";
+            bool top = Corner == "TopLeft" || Corner == "TopRight";
+            int x = right ? area.Right - size.Width - margin : area.Left + margin;
+            int y = top ? area.Top + margin : area.Bottom - size.Height - margin;
+            Rectangle bounds = new Rectangle(new Point(x, y), size);
             Bounds = bounds;
             Invalidate();
             if (!Visible) Show();

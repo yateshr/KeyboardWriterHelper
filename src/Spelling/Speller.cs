@@ -144,6 +144,7 @@ namespace KeyboardWriterHelper
         {
             Errors++;
             LastError = ex.GetType().Name + ": " + ex.Message.Trim();
+            ErrorLog.Write(ex);
         }
     }
 
