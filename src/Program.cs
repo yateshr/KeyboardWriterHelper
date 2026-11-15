@@ -38,6 +38,15 @@ namespace KeyboardWriterHelper
                 Out().WriteLine(TrayApp.AppName + " " + Version);
                 return 0;
             }
+            if (args.Length == 2 && args[0] == "--settings-shot")
+            {
+                // Draws every page of the settings window to PNG files (a way to look at the design).
+                Application.EnableVisualStyles();
+                string temp = Path.Combine(Path.GetTempPath(), "kwh-shot-" + Guid.NewGuid().ToString("N"));
+                TrayApp shotApp = new TrayApp(temp);
+                shotApp.SaveSettingsShots(args[1]);
+                return 0;
+            }
             if (args.Length >= 1 && args[0] == "--update-check")
             {
                 // Prints whether a newer release exists; with "--install <exe>" also swaps that file for it (a test).

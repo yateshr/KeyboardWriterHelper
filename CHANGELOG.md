@@ -2,6 +2,18 @@
 
 Newest first. Versions 1.1 to 1.10, then 2.1, 2.2... (see `version.txt`).
 
+## 2.2
+
+- **New look.** The settings window is redesigned: a side menu (General, Corrections,
+  My words, My fixes, Programs, Typos, Learning, Statistics, About), cards with on/off
+  switches and a short explanation under each setting, big-number statistics, and
+  proper type (Segoe UI and Semibold in a fixed scale that follows Windows display scaling).
+- Light and dark, following the Windows app setting, including the title bar, scrollbars,
+  lists, drop-downs and the tray menu. The window can be resized.
+- Fully usable from the keyboard (Tab, arrow keys in the side menu, Space on switches).
+- New About page: version, update check, privacy and credits.
+- Fixed `resrat` becoming `resort` instead of `restart`.
+
 ## 2.1
 
 - **Automatic updates.** Half a minute after start, and then once a day, the app looks at the

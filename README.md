@@ -12,6 +12,15 @@ and nothing is saved unless you ask for it (see Typos below).
 The rule behind every fix: changing correct text is worse than missing a mistake.
 When the app is not sure, it leaves the word as typed.
 
+## Screenshots
+
+The settings window follows the Windows light or dark setting.
+
+<p>
+  <img src="assets/screenshots/settings-light.png" alt="Settings window, light" width="48%">
+  <img src="assets/screenshots/settings-dark.png" alt="Settings window, dark" width="48%">
+</p>
+
 ## Build and run
 
 Two ways, both without extra packages:

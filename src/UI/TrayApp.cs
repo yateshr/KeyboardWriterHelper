@@ -105,6 +105,12 @@ namespace KeyboardWriterHelper
                 title, errorItem, statsItem, new ToolStripSeparator(), enabledItem, pauseItem, appItem, recentItem,
                 new ToolStripSeparator(), settingsItem, startupItem, updateItem,
                 new ToolStripSeparator(), exitItem });
+            Theme.Load();
+            menu.Renderer = new MenuRenderer();
+            menu.Font = Theme.Get(Face.Body, 96);
+            menu.BackColor = Theme.Card;
+            menu.ForeColor = Theme.Text;
+            menu.Padding = new Padding(0, 4, 0, 4);
             menu.Opening += delegate { RefreshMenu(); };
 
             tray = new NotifyIcon();
@@ -297,6 +303,41 @@ namespace KeyboardWriterHelper
             learning.Clear();
             learning.Save();
         }
+
+        // The numbers behind the statistics page, formatted: this session (words,
+        // corrections, undone), all time (words, corrections, share undone), health
+        // (slowest key in ms, slow lookups, errors).
+        public string[] StatsNumbers()
+        {
+            long words = baseWords + counters.Words, fixes = baseCorrections + counters.Corrections, undone = baseUndone + counters.Undone;
+            return new string[] {
+                counters.Words.ToString("N0"), counters.Corrections.ToString("N0"), counters.Undone.ToString("N0"),
+                words.ToString("N0"), fixes.ToString("N0"), Share(undone, fixes),
+                counters.SlowestKeyMs.ToString("N0"), counters.TooSlow.ToString("N0"), counters.Errors.ToString("N0") };
+        }
+
+        public void SaveSettingsShots(string folder)
+        {
+            Directory.CreateDirectory(folder);
+            SettingsForm form = new SettingsForm(this);
+            form.Show();
+            form.SaveShots(folder);
+            form.Close();
+            ContextMenuStrip menu = tray.ContextMenuStrip;
+            RefreshMenu();
+            menu.Show(new Point(80, 80));
+            for (int k = 0; k < 5; k++) { Application.DoEvents(); Thread.Sleep(40); }
+            using (Bitmap bmp = new Bitmap(menu.Width, menu.Height))
+            {
+                menu.DrawToBitmap(bmp, new Rectangle(0, 0, menu.Width, menu.Height));
+                bmp.Save(Path.Combine(folder, "tray-menu.png"), System.Drawing.Imaging.ImageFormat.Png);
+            }
+            menu.Close();
+        }
+
+        public string LastErrorText { get { return counters.LastError; } }
+
+        public void CheckForUpdatesNow() { OnUpdateItem(); }
 
         public string StatsText()
         {
