@@ -43,11 +43,11 @@ CloseApplications=no
 
 SetupIconFile=..\assets\icon.ico
 WizardStyle=modern dynamic
-WizardImageFile=build\wizard-large-100.bmp,build\wizard-large-200.bmp
-WizardSmallImageFile=build\wizard-small-100.bmp,build\wizard-small-200.bmp
+WizardImageFile=build\wizard-large-100.bmp,build\wizard-large-125.bmp,build\wizard-large-150.bmp,build\wizard-large-175.bmp,build\wizard-large-200.bmp,build\wizard-large-250.bmp,build\wizard-large-300.bmp
+WizardSmallImageFile=build\wizard-small-100.bmp,build\wizard-small-125.bmp,build\wizard-small-150.bmp,build\wizard-small-175.bmp,build\wizard-small-200.bmp,build\wizard-small-250.bmp,build\wizard-small-300.bmp
 DisableWelcomePage=no
-WizardImageFileDynamicDark=build\wizard-large-100.bmp,build\wizard-large-200.bmp
-WizardSmallImageFileDynamicDark=build\wizard-small-100.bmp,build\wizard-small-200.bmp
+WizardImageFileDynamicDark=build\wizard-large-100.bmp,build\wizard-large-125.bmp,build\wizard-large-150.bmp,build\wizard-large-175.bmp,build\wizard-large-200.bmp,build\wizard-large-250.bmp,build\wizard-large-300.bmp
+WizardSmallImageFileDynamicDark=build\wizard-small-100.bmp,build\wizard-small-125.bmp,build\wizard-small-150.bmp,build\wizard-small-175.bmp,build\wizard-small-200.bmp,build\wizard-small-250.bmp,build\wizard-small-300.bmp
 InfoBeforeFile=before.txt
 InfoAfterFile=after.txt
 

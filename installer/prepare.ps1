@@ -20,70 +20,69 @@ function New-Gradient([System.Drawing.Rectangle]$rect, $from, $to, [single]$angl
     return New-Object System.Drawing.Drawing2D.LinearGradientBrush $rect, $from, $to, $angle
 }
 
-function Draw-Logo($g, [int]$x, [int]$y, [int]$size, [bool]$square = $false) {
-    $g.SmoothingMode = 'AntiAlias'; $g.TextRenderingHint = 'AntiAliasGridFit'
-    $r = if ($square) { 0 } else { [int]($size * 0.22) }; $d = [Math]::Max(1, $r * 2)
-    $path = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $path.AddArc($x, $y, $d, $d, 180, 90); $path.AddArc($x + $size - $d, $y, $d, $d, 270, 90)
-    $path.AddArc($x + $size - $d, $y + $size - $d, $d, $d, 0, 90); $path.AddArc($x, $y + $size - $d, $d, $d, 90, 90)
-    $path.CloseFigure()
-    $rect = New-Object System.Drawing.Rectangle $x, $y, $size, $size
-    $brush = New-Gradient $rect ([System.Drawing.Color]::FromArgb(34,197,94)) ([System.Drawing.Color]::FromArgb(21,128,61)) 45
-    $g.FillPath($brush, $path)
-    $font = New-Object System.Drawing.Font 'Segoe UI Semibold', ($size * 0.40), ([System.Drawing.FontStyle]::Bold), ([System.Drawing.GraphicsUnit]::Pixel)
-    $fmt = New-Object System.Drawing.StringFormat; $fmt.Alignment = 'Center'; $fmt.LineAlignment = 'Center'
-    $g.DrawString('Aa', $font, [System.Drawing.Brushes]::White, [System.Drawing.RectangleF]::new($x, $y - $size * 0.03, $size, $size * 0.86), $fmt)
-    $pen = New-Object System.Drawing.Pen ([System.Drawing.Color]::White), ([single]([Math]::Max(1.5, $size * 0.05)))
-    $pen.StartCap = 'Round'; $pen.EndCap = 'Round'; $pen.LineJoin = 'Round'
-    [System.Drawing.PointF[]]$pts = @(
-        [System.Drawing.PointF]::new($x + $size * 0.30, $y + $size * 0.80),
-        [System.Drawing.PointF]::new($x + $size * 0.42, $y + $size * 0.88),
-        [System.Drawing.PointF]::new($x + $size * 0.70, $y + $size * 0.74))
-    $g.DrawLines($pen, $pts)
-}
+. (Join-Path $root 'assets\logo-lib.ps1')
 
-# The welcome and finish picture: dark green, rows of faint keys, the logo and the name.
+# The welcome and finish picture: dark green, rows of soft keycaps, the logo and the name.
+# Drawn three times larger and scaled down, so edges and text are smooth at every size.
 function New-Large([int]$scalePercent) {
     $k = $scalePercent / 100.0
-    $w = [int](164 * $k); $h = [int](314 * $k)
-    $bmp = New-Object System.Drawing.Bitmap $w, $h, ([System.Drawing.Imaging.PixelFormat]::Format24bppRgb)
-    $g = [System.Drawing.Graphics]::FromImage($bmp)
-    $g.SmoothingMode = 'AntiAlias'; $g.TextRenderingHint = 'AntiAliasGridFit'
-    $rect = New-Object System.Drawing.Rectangle 0, 0, $w, $h
-    $g.FillRectangle((New-Gradient $rect ([System.Drawing.Color]::FromArgb(5,46,28)) ([System.Drawing.Color]::FromArgb(21,128,61)) 70), $rect)
+    $w = [int][Math]::Round(164 * $k); $h = [int][Math]::Round(314 * $k)
+    $ss = 3
+    $kk = $k * $ss
+    $BW = $w * $ss; $BH = $h * $ss
+    $big = New-Object System.Drawing.Bitmap $BW, $BH, ([System.Drawing.Imaging.PixelFormat]::Format24bppRgb)
+    $g = [System.Drawing.Graphics]::FromImage($big)
+    $g.SmoothingMode = 'AntiAlias'; $g.TextRenderingHint = 'AntiAlias'; $g.PixelOffsetMode = 'HighQuality'
+    $rect = New-Object System.Drawing.Rectangle 0, 0, $BW, $BH
+    $g.FillRectangle((New-Gradient $rect ([System.Drawing.Color]::FromArgb(4,40,24)) ([System.Drawing.Color]::FromArgb(22,128,62)) 70), $rect)
 
-    # faint keyboard keys across the lower half
-    $keyBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(22, 255, 255, 255))
-    $keyPen = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(40, 255, 255, 255)), ([single][Math]::Max(1, $k))
-    $key = [int](26 * $k); $gap = [int](5 * $k)
+    # soft keycaps across the lower part, fading out towards the bottom
+    $capFill = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(26, 255, 255, 255))
+    $capEdge = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(46, 255, 255, 255)), ([single]([Math]::Max(1, 1.2 * $kk)))
+    $key = 27 * $kk; $gap = 6 * $kk; $round = 6 * $kk
     for ($row = 0; $row -lt 5; $row++) {
-        $y = [int](178 * $k) + $row * ($key + $gap)
-        $offset = ($row % 2) * [int](($key + $gap) / 2) - [int](12 * $k)
+        $y = 182 * $kk + $row * ($key + $gap)
+        $offset = ($row % 2) * (($key + $gap) / 2) - 14 * $kk
         for ($col = 0; $col -lt 7; $col++) {
             $x = $offset + $col * ($key + $gap)
             $path = New-Object System.Drawing.Drawing2D.GraphicsPath
-            $rr = [int](5 * $k); $dd = $rr * 2
-            $path.AddArc($x, $y, $dd, $dd, 180, 90); $path.AddArc($x + $key - $dd, $y, $dd, $dd, 270, 90)
-            $path.AddArc($x + $key - $dd, $y + $key - $dd, $dd, $dd, 0, 90); $path.AddArc($x, $y + $key - $dd, $dd, $dd, 90, 90)
+            $d = $round * 2
+            $path.AddArc($x, $y, $d, $d, 180, 90); $path.AddArc($x + $key - $d, $y, $d, $d, 270, 90)
+            $path.AddArc($x + $key - $d, $y + $key - $d, $d, $d, 0, 90); $path.AddArc($x, $y + $key - $d, $d, $d, 90, 90)
             $path.CloseFigure()
-            $g.FillPath($keyBrush, $path); $g.DrawPath($keyPen, $path)
+            $g.FillPath($capFill, $path); $g.DrawPath($capEdge, $path)
         }
     }
-    # fade the keys out towards the bottom so the text stays readable
-    $fade = New-Gradient (New-Object System.Drawing.Rectangle 0, ([int](150 * $k)), $w, ([int](164 * $k))) ([System.Drawing.Color]::FromArgb(0, 5, 46, 28)) ([System.Drawing.Color]::FromArgb(150, 5, 46, 28)) 90
-    $g.FillRectangle($fade, 0, [int](150 * $k), $w, $h - [int](150 * $k))
+    $fadeRect = New-Object System.Drawing.Rectangle 0, ([int](150 * $kk)), $BW, ([int](170 * $kk))
+    $fade = New-Gradient $fadeRect ([System.Drawing.Color]::FromArgb(0, 4, 40, 24)) ([System.Drawing.Color]::FromArgb(170, 4, 40, 24)) 90
+    $g.FillRectangle($fade, 0, [int](150 * $kk), $BW, $BH - [int](150 * $kk))
 
-    $size = [int](92 * $k)
-    Draw-Logo $g ([int](($w - $size) / 2)) ([int](28 * $k)) $size
+    # the logo, large and centred, with a soft glow behind it
+    $size = [int](100 * $kk)
+    $lx = [int](($BW - $size) / 2); $ly = [int](24 * $kk)
+    $glow = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $glow.AddEllipse([int]($lx - 26 * $kk), [int]($ly - 20 * $kk), [int]($size + 52 * $kk), [int]($size + 52 * $kk))
+    $glowBrush = New-Object System.Drawing.Drawing2D.PathGradientBrush $glow
+    $glowBrush.CenterColor = [System.Drawing.Color]::FromArgb(90, 74, 222, 128)
+    $glowBrush.SurroundColors = @([System.Drawing.Color]::FromArgb(0, 74, 222, 128))
+    $g.FillPath($glowBrush, $glow)
+    Draw-Logo $g $lx $ly $size
 
     $fmt = New-Object System.Drawing.StringFormat; $fmt.Alignment = 'Center'
-    $title = New-Object System.Drawing.Font 'Segoe UI Semibold', (15 * $k), ([System.Drawing.FontStyle]::Bold), ([System.Drawing.GraphicsUnit]::Pixel)
-    $sub = New-Object System.Drawing.Font 'Segoe UI', (11.5 * $k), ([System.Drawing.FontStyle]::Regular), ([System.Drawing.GraphicsUnit]::Pixel)
-    $g.DrawString("Keyboard Writer`nHelper", $title, [System.Drawing.Brushes]::White, [System.Drawing.RectangleF]::new(0, 130 * $k, $w, 50 * $k), $fmt)
-    $soft = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(215, 235, 245, 238))
-    $g.DrawString("Spelling fixed as you type,`nin every program.", $sub, $soft, [System.Drawing.RectangleF]::new(0, 190 * $k, $w, 40 * $k), $fmt)
-    $g.DrawString("Version $Version`nby YATESH ROHIT", $sub, $soft, [System.Drawing.RectangleF]::new(0, 268 * $k, $w, 40 * $k), $fmt)
+    $title = New-Object System.Drawing.Font 'Segoe UI Semibold', (16 * $kk), ([System.Drawing.FontStyle]::Bold), ([System.Drawing.GraphicsUnit]::Pixel)
+    $sub = New-Object System.Drawing.Font 'Segoe UI', (11.5 * $kk), ([System.Drawing.FontStyle]::Regular), ([System.Drawing.GraphicsUnit]::Pixel)
+    $g.DrawString("Keyboard Writer`nHelper", $title, [System.Drawing.Brushes]::White, [System.Drawing.RectangleF]::new(0, 140 * $kk, $BW, 56 * $kk), $fmt)
+    $soft = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(225, 236, 247, 240))
+    $g.DrawString("Spelling fixed as you type,`nin every program.", $sub, $soft, [System.Drawing.RectangleF]::new(0, 204 * $kk, $BW, 40 * $kk), $fmt)
+    $dim = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(190, 236, 247, 240))
+    $g.DrawString("Version $Version`nby YATESH ROHIT", $sub, $dim, [System.Drawing.RectangleF]::new(0, 272 * $kk, $BW, 40 * $kk), $fmt)
     $g.Dispose()
+
+    $bmp = New-Object System.Drawing.Bitmap $w, $h, ([System.Drawing.Imaging.PixelFormat]::Format24bppRgb)
+    $gs = [System.Drawing.Graphics]::FromImage($bmp)
+    $gs.InterpolationMode = 'HighQualityBicubic'; $gs.PixelOffsetMode = 'HighQuality'; $gs.SmoothingMode = 'HighQuality'
+    $gs.DrawImage($big, 0, 0, $w, $h)
+    $gs.Dispose(); $big.Dispose()
     $bmp.Save((Join-Path $out ("wizard-large-$scalePercent.bmp")), [System.Drawing.Imaging.ImageFormat]::Bmp)
     $bmp.Dispose()
 }
@@ -100,8 +99,8 @@ function New-Small([int]$scalePercent) {
     $bmp.Dispose()
 }
 
-New-Large 100; New-Large 200
-New-Small 100; New-Small 200
+# One exact-size picture per Windows scaling level, so it is never stretched.
+foreach ($pct in 100, 125, 150, 175, 200, 250, 300) { New-Large $pct; New-Small $pct }
 
 # ---------- text ----------
 

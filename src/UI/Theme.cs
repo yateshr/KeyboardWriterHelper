@@ -196,33 +196,90 @@ namespace KeyboardWriterHelper
             catch (Exception) { }
         }
 
-        // The logo: a rounded square, "Aa" and a check mark.
+        public static GraphicsPath Round(RectangleF r, float radius)
+        {
+            float d = Math.Max(2f, radius * 2f);
+            GraphicsPath p = new GraphicsPath();
+            p.AddArc(r.X, r.Y, d, d, 180, 90);
+            p.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+            p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+            p.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+            p.CloseFigure();
+            return p;
+        }
+
+        // Darker (factor below 1) or lighter (above 1) version of a colour.
+        public static Color Shade(Color c, double factor)
+        {
+            if (factor <= 1)
+                return Color.FromArgb(c.A, (int)(c.R * factor), (int)(c.G * factor), (int)(c.B * factor));
+            double t = factor - 1;
+            return Color.FromArgb(c.A, (int)(c.R + (255 - c.R) * t), (int)(c.G + (255 - c.G) * t), (int)(c.B + (255 - c.B) * t));
+        }
+
+        // The logo: a keycap with a white letter A and a check badge on its corner.
+        // Drawn from shapes (no font), in the colour given: green when it is running.
+        // The same drawing as assets\logo-lib.ps1, which makes the icon files.
         public static void DrawLogo(Graphics g, Rectangle r, Color back)
         {
-            SmoothingMode old = g.SmoothingMode;
+            SmoothingMode oldSmoothing = g.SmoothingMode;
+            System.Drawing.Drawing2D.PixelOffsetMode oldOffset = g.PixelOffsetMode;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            using (GraphicsPath shape = Round(r, (int)(r.Width * 0.22)))
-            using (LinearGradientBrush fill = new LinearGradientBrush(r,
-                Color.FromArgb(Math.Min(255, back.R + 14), Math.Min(255, back.G + 34), Math.Min(255, back.B + 17)), back, 45f))
-                g.FillPath(fill, shape);
-            using (Font font = new Font(Has(Semibold) ? Semibold : Regular, r.Width * 0.40f, FontStyle.Bold, GraphicsUnit.Pixel))
-            using (StringFormat center = new StringFormat())
+            g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+            float n = r.Width, x0 = r.X, y0 = r.Y;
+            Color shadow = Color.FromArgb(70, 4, 50, 24);
+
+            using (GraphicsPath plate = Round(new RectangleF(x0, y0, n, n), n * 0.225f))
+            using (LinearGradientBrush b = new LinearGradientBrush(new PointF(0, y0), new PointF(0, y0 + n), Shade(back, 0.62), Shade(back, 0.33)))
+                g.FillPath(b, plate);
+
+            RectangleF faceRect = new RectangleF(x0 + n * 0.065f, y0 + n * 0.045f, n * 0.87f, n * 0.80f);
+            using (GraphicsPath face = Round(faceRect, n * 0.17f))
             {
-                center.Alignment = StringAlignment.Center;
-                center.LineAlignment = StringAlignment.Center;
-                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
-                g.DrawString("Aa", font, Brushes.White, new RectangleF(r.X, r.Y - r.Height * 0.03f, r.Width, r.Height * 0.86f), center);
+                using (LinearGradientBrush b = new LinearGradientBrush(new PointF(0, faceRect.Top), new PointF(0, faceRect.Bottom), Shade(back, 1.32), back))
+                    g.FillPath(b, face);
+                using (Pen hi = new Pen(Color.FromArgb(110, 255, 255, 255), Math.Max(1f, n * 0.012f)))
+                    g.DrawPath(hi, face);
             }
-            using (Pen check = new Pen(Color.White, Math.Max(1.5f, r.Width * 0.05f)))
+
+            // the letter A (a soft shadow first, then the white letter)
+            for (int pass = 0; pass < 2; pass++)
+            {
+                float dy = pass == 0 ? n * 0.016f : 0f;
+                Color ink = pass == 0 ? shadow : Color.White;
+                using (Pen leg = new Pen(ink, n * 0.088f))
+                using (Pen bar = new Pen(ink, n * 0.072f))
+                {
+                    leg.StartCap = leg.EndCap = LineCap.Round;
+                    leg.LineJoin = LineJoin.Round;
+                    bar.StartCap = bar.EndCap = LineCap.Round;
+                    g.DrawLines(leg, new PointF[] {
+                        new PointF(x0 + n * 0.255f, y0 + n * 0.690f + dy),
+                        new PointF(x0 + n * 0.455f, y0 + n * 0.215f + dy),
+                        new PointF(x0 + n * 0.655f, y0 + n * 0.690f + dy) });
+                    g.DrawLine(bar, x0 + n * 0.352f, y0 + n * 0.535f + dy, x0 + n * 0.558f, y0 + n * 0.535f + dy);
+                }
+            }
+
+            // the badge
+            float bx = x0 + n * 0.735f, by = y0 + n * 0.715f, br = n * 0.185f;
+            using (SolidBrush b = new SolidBrush(shadow))
+                g.FillEllipse(b, bx - br, by - br + n * 0.016f, 2 * br, 2 * br);
+            using (SolidBrush b = new SolidBrush(Shade(back, 0.55)))
+                g.FillEllipse(b, bx - br, by - br, 2 * br, 2 * br);
+            using (Pen ring = new Pen(Color.White, Math.Max(1f, n * 0.026f)))
+                g.DrawEllipse(ring, bx - br, by - br, 2 * br, 2 * br);
+            using (Pen check = new Pen(Color.White, Math.Max(1f, n * 0.056f)))
             {
                 check.StartCap = check.EndCap = LineCap.Round;
                 check.LineJoin = LineJoin.Round;
                 g.DrawLines(check, new PointF[] {
-                    new PointF(r.X + r.Width * 0.30f, r.Y + r.Height * 0.80f),
-                    new PointF(r.X + r.Width * 0.42f, r.Y + r.Height * 0.88f),
-                    new PointF(r.X + r.Width * 0.70f, r.Y + r.Height * 0.74f) });
+                    new PointF(bx - br * 0.50f, by + br * 0.02f),
+                    new PointF(bx - br * 0.12f, by + br * 0.42f),
+                    new PointF(bx + br * 0.55f, by - br * 0.38f) });
             }
-            g.SmoothingMode = old;
+            g.SmoothingMode = oldSmoothing;
+            g.PixelOffsetMode = oldOffset;
         }
     }
 

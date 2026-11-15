@@ -12,6 +12,8 @@ Newest first. Versions 1.1 to 1.10, then 2.1, 2.2... (see `version.txt`).
   lists, drop-downs and the tray menu. The window can be resized.
 - The suggestion bar in the top-right corner and every message (update available, update
   problems, confirmations) use the same colours and type, instead of the grey Windows boxes.
+- **New logo**: a green keycap with an A and a check badge, drawn from shapes so it is sharp at every size.
+  Used for the app icon, the tray icon (green, grey or amber), the settings window and the installer.
 - About shows who made the app.
 - **Installer.** There are now two downloads: the portable exe as before, and a setup
   (`KeyboardWriterHelper-Setup-<version>.exe`) with a welcome picture, a "before you install"
