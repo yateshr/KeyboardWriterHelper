@@ -30,11 +30,13 @@ namespace KeyboardWriterHelper
             catch (Exception) { return 1; }
         }
 
-        const int Oversample = 3;
+        // Drawn straight at the final size: shapes are anti-aliased by GDI+ and the text is
+        // hinted to the pixel grid. (Drawing larger and scaling down looked softer.)
+        const int Oversample = 1;
 
-        // Everything is drawn three times larger and scaled down, which smooths the edges.
         static Bitmap Finish(Bitmap big, int width, int height)
         {
+            if (big.Width == width && big.Height == height) return big;
             Bitmap result = new Bitmap(width, height, PixelFormat.Format24bppRgb);
             using (Graphics g = Graphics.FromImage(result))
             {
@@ -71,7 +73,7 @@ namespace KeyboardWriterHelper
             {
                 g.SmoothingMode = SmoothingMode.AntiAlias;
                 g.PixelOffsetMode = PixelOffsetMode.HighQuality;
-                g.TextRenderingHint = TextRenderingHint.AntiAlias;
+                g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
 
                 using (LinearGradientBrush bg = new LinearGradientBrush(new Rectangle(0, 0, W, H),
                     Color.FromArgb(4, 40, 24), Color.FromArgb(22, 128, 62), 70f))

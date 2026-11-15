@@ -127,7 +127,12 @@ begin
   begin
     Image.Stretch := False;
     Image.Bitmap.LoadFromFile(Picture);
-  end;
+    Log('Picture ' + Kind + ': drawn at ' + IntToStr(Image.Width) + 'x' + IntToStr(Image.Height) +
+        ', loaded ' + IntToStr(Image.Bitmap.Width) + 'x' + IntToStr(Image.Bitmap.Height) +
+        ', screen ' + IntToStr(WizardForm.Font.PixelsPerInch) + ' dpi');
+  end
+  else
+    Log('Picture ' + Kind + ': not drawn (exit code ' + IntToStr(Code) + '), using the built-in one');
 end;
 
 function GetSysColor(Index: Integer): Integer; external 'GetSysColor@user32.dll stdcall';
